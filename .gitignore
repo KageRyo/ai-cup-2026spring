@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+.cache/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+.codex
+.env
+.env.*
+
+# Project-local conda environment and package cache.
+conda-envs/
+conda-pkgs/
+
+# Raw competition data and generated artifacts.
+*.csv
+!sample_submission.csv
+outputs/
+models/
+
+# Official downloaded baseline archive/extract.
+baseline code_0413.zip
+baseline_official/
