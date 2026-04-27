@@ -9,6 +9,8 @@ description = "AI CUP 2026 Spring table-tennis rally prediction experiments."
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 dependencies = [
+    "catboost>=1.2",
+    "lightgbm>=4.6",
     "numpy>=2.0",
     "pandas>=2.2",
     "scikit-learn>=1.5",

@@ -87,6 +87,49 @@ def score(action_true, action_pred, point_true, point_pred, rally_true, rally_pr
 
 
 def build_model(task: str, args):
+    if args.model == "lightgbm":
+        from lightgbm import LGBMClassifier
+
+        objective = "binary" if task == "rally" else "multiclass"
+        params = {
+            "objective": objective,
+            "n_estimators": args.n_estimators,
+            "learning_rate": args.learning_rate,
+            "num_leaves": args.num_leaves,
+            "max_depth": args.max_depth if args.max_depth > 0 else -1,
+            "min_child_samples": args.min_samples_leaf,
+            "subsample": args.subsample,
+            "colsample_bytree": args.colsample_bytree,
+            "reg_lambda": args.l2_regularization,
+            "class_weight": "balanced" if task in {"action", "point"} else None,
+            "random_state": args.seed,
+            "n_jobs": args.n_jobs,
+            "verbosity": -1,
+        }
+        if args.device == "gpu":
+            params["device_type"] = "gpu"
+        return LGBMClassifier(**params)
+
+    if args.model == "catboost":
+        from catboost import CatBoostClassifier
+
+        params = {
+            "iterations": args.n_estimators,
+            "learning_rate": args.learning_rate,
+            "depth": args.cat_depth,
+            "l2_leaf_reg": max(args.l2_regularization, 1e-8),
+            "loss_function": "Logloss" if task == "rally" else "MultiClass",
+            "auto_class_weights": "Balanced" if task in {"action", "point"} else None,
+            "random_seed": args.seed,
+            "thread_count": args.n_jobs,
+            "verbose": args.verbose_eval,
+            "allow_writing_files": False,
+        }
+        if args.device == "gpu":
+            params["task_type"] = "GPU"
+            params["devices"] = args.gpu_devices
+        return CatBoostClassifier(**params)
+
     if args.model == "rf":
         return RandomForestClassifier(
             n_estimators=args.n_estimators,
@@ -169,8 +212,8 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
     submission = pd.DataFrame(
         {
             "rally_uid": test_samples["rally_uid"].astype(int).to_numpy(),
-            "actionId": action_model.predict(x_test).astype(int),
-            "pointId": point_model.predict(x_test).astype(int),
+            "actionId": np.asarray(action_model.predict(x_test)).ravel().astype(int),
+            "pointId": np.asarray(point_model.predict(x_test)).ravel().astype(int),
             "serverGetPoint": rally_model.predict_proba(x_test)[:, 1],
         },
         columns=SUBMISSION_COLUMNS,
@@ -183,17 +226,24 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--train", default="train.csv")
     parser.add_argument("--test", default="test.csv")
     parser.add_argument("--out", default="outputs/submission_tabular_baseline.csv")
-    parser.add_argument("--model", choices=["hgb", "rf"], default="hgb")
+    parser.add_argument("--model", choices=["hgb", "rf", "lightgbm", "catboost"], default="lightgbm")
+    parser.add_argument("--device", choices=["cpu", "gpu"], default="cpu")
+    parser.add_argument("--gpu-devices", default="0")
     parser.add_argument("--val-size", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--max-iter", type=int, default=250)
     parser.add_argument("--learning-rate", type=float, default=0.05)
     parser.add_argument("--max-leaf-nodes", type=int, default=31)
+    parser.add_argument("--num-leaves", type=int, default=63)
     parser.add_argument("--l2-regularization", type=float, default=0.01)
-    parser.add_argument("--n-estimators", type=int, default=500)
+    parser.add_argument("--n-estimators", type=int, default=300)
     parser.add_argument("--max-depth", type=int, default=18)
+    parser.add_argument("--cat-depth", type=int, default=8)
     parser.add_argument("--min-samples-leaf", type=int, default=2)
+    parser.add_argument("--subsample", type=float, default=0.9)
+    parser.add_argument("--colsample-bytree", type=float, default=0.9)
     parser.add_argument("--n-jobs", type=int, default=-1)
+    parser.add_argument("--verbose-eval", type=int, default=False)
     parser.add_argument("--no-refit-full", dest="refit_full", action="store_false")
     parser.set_defaults(refit_full=True)
     return parser.parse_args(argv)
