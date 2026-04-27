@@ -22,6 +22,7 @@ dev = [
 
 [project.scripts]
 aicup-lstm-baseline = "aicup_ryo.train_lstm_baseline:main"
+aicup-tabular-baseline = "aicup_ryo.train_tabular_baseline:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

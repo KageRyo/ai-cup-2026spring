@@ -27,3 +27,12 @@ aicup-lstm-baseline \
   --test test.csv \
   --out outputs/submission_lstm_baseline.csv
 ```
+
+Run the sklearn tabular experiment:
+
+```bash
+aicup-tabular-baseline \
+  --train train.csv \
+  --test test.csv \
+  --out outputs/submission_tabular_baseline.csv
+```
