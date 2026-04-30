@@ -150,6 +150,14 @@ def score(action_true, action_pred, point_true, point_pred, rally_true, rally_pr
     return {"f1_action": f1_action, "f1_point": f1_point, "auc": auc, "score": final}
 
 
+def use_class_weights(task: str, args) -> bool:
+    if task == "action":
+        return args.action_class_weights == "balanced"
+    if task == "point":
+        return args.point_class_weights == "balanced"
+    return False
+
+
 def build_model(task: str, args):
     if args.model == "lightgbm":
         from lightgbm import LGBMClassifier
@@ -165,7 +173,7 @@ def build_model(task: str, args):
             "subsample": args.subsample,
             "colsample_bytree": args.colsample_bytree,
             "reg_lambda": args.l2_regularization,
-            "class_weight": "balanced" if task in {"action", "point"} else None,
+            "class_weight": "balanced" if use_class_weights(task, args) else None,
             "random_state": args.seed,
             "n_jobs": args.n_jobs,
             "verbosity": -1,
@@ -183,7 +191,7 @@ def build_model(task: str, args):
             "depth": args.cat_depth,
             "l2_leaf_reg": max(args.l2_regularization, 1e-8),
             "loss_function": "Logloss" if task == "rally" else "MultiClass",
-            "auto_class_weights": "Balanced" if task in {"action", "point"} else None,
+            "auto_class_weights": "Balanced" if use_class_weights(task, args) else None,
             "random_seed": args.seed,
             "thread_count": args.n_jobs,
             "verbose": args.verbose_eval,
@@ -199,7 +207,7 @@ def build_model(task: str, args):
             n_estimators=args.n_estimators,
             max_depth=args.max_depth if args.max_depth > 0 else None,
             min_samples_leaf=args.min_samples_leaf,
-            class_weight="balanced_subsample",
+            class_weight="balanced_subsample" if use_class_weights(task, args) else None,
             n_jobs=args.n_jobs,
             random_state=args.seed,
         )
@@ -212,7 +220,7 @@ def build_model(task: str, args):
         "early_stopping": False,
         "random_state": args.seed,
     }
-    if task in {"action", "point"}:
+    if use_class_weights(task, args):
         common["class_weight"] = "balanced"
     return HistGradientBoostingClassifier(**common)
 
@@ -295,6 +303,8 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
             "val_rallies": int(len(val_rally)),
             "features": int(len(features)),
             "stack_point_action": bool(args.stack_point_action),
+            "action_class_weights": args.action_class_weights,
+            "point_class_weights": args.point_class_weights,
         }
     )
     print(
@@ -372,6 +382,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--verbose-eval", type=int, default=False)
     parser.add_argument("--metrics-out")
     parser.add_argument("--val-predictions-out")
+    parser.add_argument("--action-class-weights", choices=["balanced", "none"], default="balanced")
+    parser.add_argument("--point-class-weights", choices=["balanced", "none"], default="balanced")
     parser.add_argument("--no-stack-point-action", dest="stack_point_action", action="store_false")
     parser.add_argument("--no-refit-full", dest="refit_full", action="store_false")
     parser.set_defaults(refit_full=True, stack_point_action=True)
