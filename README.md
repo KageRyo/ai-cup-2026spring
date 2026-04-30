@@ -50,3 +50,12 @@ aicup-tabular-baseline \
   --metrics-out outputs/metrics_catboost_gpu.json \
   --val-predictions-out outputs/val_catboost_gpu
 ```
+
+Audit validation signals and simple leakage risks:
+
+```bash
+aicup-audit-validation \
+  --train train.csv \
+  --test test.csv \
+  --out outputs/audit_validation.json
+```

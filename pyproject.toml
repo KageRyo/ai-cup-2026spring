@@ -23,6 +23,7 @@ dev = [
 ]
 
 [project.scripts]
+aicup-audit-validation = "aicup_ryo.audit_validation:main"
 aicup-lstm-baseline = "aicup_ryo.train_lstm_baseline:main"
 aicup-tabular-baseline = "aicup_ryo.train_tabular_baseline:main"
 
