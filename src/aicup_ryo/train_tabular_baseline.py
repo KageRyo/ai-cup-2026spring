@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import numpy as np
@@ -62,6 +63,15 @@ def make_next_shot_samples(train: pd.DataFrame) -> pd.DataFrame:
     return samples
 
 
+def make_rally_samples(train: pd.DataFrame) -> pd.DataFrame:
+    featured = add_prefix_features(train)
+    group = featured.groupby("rally_uid", sort=False)
+    featured["is_final_prefix"] = group.cumcount() == (group["rally_uid"].transform("size") - 2)
+    samples = featured[featured["is_final_prefix"]].copy()
+    samples["serverGetPoint"] = samples["serverGetPoint"].astype("int8")
+    return samples
+
+
 def make_test_samples(test: pd.DataFrame) -> pd.DataFrame:
     featured = add_prefix_features(test)
     return featured.groupby("rally_uid", sort=False).tail(1).copy()
@@ -76,6 +86,40 @@ def feature_columns(frame: pd.DataFrame) -> list[str]:
         "is_final_prefix",
     }
     return [col for col in frame.columns if col not in excluded]
+
+
+def prediction_frame(
+    frame: pd.DataFrame,
+    action_pred,
+    point_pred,
+    rally_pred,
+) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "rally_uid": frame["rally_uid"].astype(int).to_numpy(),
+            "actionId": np.asarray(action_pred).ravel().astype(int),
+            "pointId": np.asarray(point_pred).ravel().astype(int),
+            "serverGetPoint": np.asarray(rally_pred).ravel().astype(float),
+        },
+        columns=SUBMISSION_COLUMNS,
+    ).sort_values("rally_uid")
+
+
+def save_validation_predictions(
+    out_prefix: str,
+    next_shot: pd.DataFrame,
+    rally: pd.DataFrame,
+) -> None:
+    prefix = Path(out_prefix)
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    next_shot_path = prefix.with_name(f"{prefix.stem}_next_shot.csv")
+    rally_path = prefix.with_name(f"{prefix.stem}_rally.csv")
+    next_shot.to_csv(next_shot_path, index=False, encoding="utf-8")
+    rally.to_csv(rally_path, index=False, encoding="utf-8")
+    print(
+        f"Saved validation predictions to: {next_shot_path} and {rally_path}",
+        flush=True,
+    )
 
 
 def score(action_true, action_pred, point_true, point_pred, rally_true, rally_pred) -> dict[str, float]:
@@ -155,26 +199,37 @@ def build_model(task: str, args):
 
 def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
     samples = make_next_shot_samples(train)
+    rally_samples = make_rally_samples(train)
     test_samples = make_test_samples(test)
     features = feature_columns(samples)
+    rally_features = feature_columns(rally_samples)
     print(
         f"Train prefix samples={len(samples)} | test rallies={len(test_samples)} | "
-        f"features={len(features)}",
+        f"features={len(features)} | rally samples={len(rally_samples)}",
         flush=True,
     )
 
     splitter = GroupShuffleSplit(n_splits=1, test_size=args.val_size, random_state=args.seed)
-    train_idx, val_idx = next(splitter.split(samples, groups=samples["match"]))
-    train_part = samples.iloc[train_idx]
-    val_part = samples.iloc[val_idx]
+    train_rally_idx, val_rally_idx = next(splitter.split(rally_samples, groups=rally_samples["match"]))
+    train_matches = set(rally_samples.iloc[train_rally_idx]["match"].unique())
+    val_matches = set(rally_samples.iloc[val_rally_idx]["match"].unique())
+
+    train_part = samples[samples["match"].isin(train_matches)].copy()
+    val_part = samples[samples["match"].isin(val_matches)].copy()
+    train_rally = rally_samples.iloc[train_rally_idx].copy()
+    val_rally = rally_samples.iloc[val_rally_idx].copy()
     print(
-        f"Train matches={train_part['match'].nunique()} | val matches={val_part['match'].nunique()}",
+        f"Train matches={len(train_matches)} | val matches={len(val_matches)} | "
+        f"val rallies={len(val_rally)}",
         flush=True,
     )
 
     x_train = train_part[features]
     x_val = val_part[features]
     x_test = test_samples[features]
+    x_rally_train = train_rally[rally_features]
+    x_rally_val = val_rally[rally_features]
+    x_rally_test = test_samples[rally_features]
 
     action_model = build_model("action", args)
     point_model = build_model("point", args)
@@ -184,17 +239,31 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
     action_model.fit(x_train, train_part["target_actionId"])
     print("Training point model...", flush=True)
     point_model.fit(x_train, train_part["target_pointId"])
-    print("Training rally model...", flush=True)
-    rally_model.fit(x_train, train_part["serverGetPoint"])
+    print("Training rally model on last known prefix per rally...", flush=True)
+    rally_model.fit(x_rally_train, train_rally["serverGetPoint"])
 
-    val_final = val_part[val_part["is_final_prefix"]].copy()
+    val_action_pred = action_model.predict(x_val)
+    val_point_pred = point_model.predict(x_val)
+    val_rally_pred = rally_model.predict_proba(x_rally_val)[:, 1]
     metrics = score(
         val_part["target_actionId"],
-        action_model.predict(x_val),
+        val_action_pred,
         val_part["target_pointId"],
-        point_model.predict(x_val),
-        val_final["serverGetPoint"],
-        rally_model.predict_proba(val_final[features])[:, 1],
+        val_point_pred,
+        val_rally["serverGetPoint"],
+        val_rally_pred,
+    )
+    metrics.update(
+        {
+            "model": args.model,
+            "seed": args.seed,
+            "val_size": args.val_size,
+            "train_prefix_samples": int(len(train_part)),
+            "val_prefix_samples": int(len(val_part)),
+            "train_rallies": int(len(train_rally)),
+            "val_rallies": int(len(val_rally)),
+            "features": int(len(features)),
+        }
     )
     print(
         f"Validation F1_action={metrics['f1_action']:.4f} "
@@ -203,21 +272,35 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
         flush=True,
     )
 
+    if args.val_predictions_out:
+        val_action_frame = val_part[["rally_uid"]].copy()
+        val_action_frame["actionId_true"] = val_part["target_actionId"].astype(int).to_numpy()
+        val_action_frame["pointId_true"] = val_part["target_pointId"].astype(int).to_numpy()
+        val_action_frame["actionId_pred"] = np.asarray(val_action_pred).ravel().astype(int)
+        val_action_frame["pointId_pred"] = np.asarray(val_point_pred).ravel().astype(int)
+
+        val_rally_frame = val_rally[["rally_uid", "serverGetPoint"]].rename(
+            columns={"serverGetPoint": "serverGetPoint_true"}
+        )
+        val_rally_frame["serverGetPoint_pred"] = val_rally_pred
+
+        save_validation_predictions(args.val_predictions_out, val_action_frame, val_rally_frame)
+
     if args.refit_full:
         print("Refitting models on all prefix samples...", flush=True)
         action_model = build_model("action", args).fit(samples[features], samples["target_actionId"])
         point_model = build_model("point", args).fit(samples[features], samples["target_pointId"])
-        rally_model = build_model("rally", args).fit(samples[features], samples["serverGetPoint"])
+        rally_model = build_model("rally", args).fit(
+            rally_samples[rally_features],
+            rally_samples["serverGetPoint"],
+        )
 
-    submission = pd.DataFrame(
-        {
-            "rally_uid": test_samples["rally_uid"].astype(int).to_numpy(),
-            "actionId": np.asarray(action_model.predict(x_test)).ravel().astype(int),
-            "pointId": np.asarray(point_model.predict(x_test)).ravel().astype(int),
-            "serverGetPoint": rally_model.predict_proba(x_test)[:, 1],
-        },
-        columns=SUBMISSION_COLUMNS,
-    ).sort_values("rally_uid")
+    submission = prediction_frame(
+        test_samples,
+        action_model.predict(x_test),
+        point_model.predict(x_test),
+        rally_model.predict_proba(x_rally_test)[:, 1],
+    )
     return metrics, submission
 
 
@@ -228,7 +311,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--out", default="outputs/submission_tabular_baseline.csv")
     parser.add_argument("--model", choices=["hgb", "rf", "lightgbm", "catboost"], default="lightgbm")
     parser.add_argument("--device", choices=["cpu", "gpu"], default="cpu")
-    parser.add_argument("--gpu-devices", default="0")
+    parser.add_argument("--gpu-devices", default="0:1")
     parser.add_argument("--val-size", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--max-iter", type=int, default=250)
@@ -244,6 +327,8 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--colsample-bytree", type=float, default=0.9)
     parser.add_argument("--n-jobs", type=int, default=-1)
     parser.add_argument("--verbose-eval", type=int, default=False)
+    parser.add_argument("--metrics-out")
+    parser.add_argument("--val-predictions-out")
     parser.add_argument("--no-refit-full", dest="refit_full", action="store_false")
     parser.set_defaults(refit_full=True)
     return parser.parse_args(argv)
@@ -260,6 +345,11 @@ def main(argv: list[str] | None = None) -> None:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(out_path, index=False, encoding="utf-8")
+    if args.metrics_out:
+        metrics_path = Path(args.metrics_out)
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        metrics_path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"Saved metrics to: {metrics_path}", flush=True)
     print(f"Saved submission to: {out_path}", flush=True)
     print(submission.head(), flush=True)
 

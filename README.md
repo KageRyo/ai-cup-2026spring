@@ -36,3 +36,17 @@ aicup-tabular-baseline \
   --test test.csv \
   --out outputs/submission_tabular_baseline.csv
 ```
+
+Run the CatBoost tabular experiment on both local GPUs:
+
+```bash
+aicup-tabular-baseline \
+  --model catboost \
+  --device gpu \
+  --gpu-devices 0:1 \
+  --train train.csv \
+  --test test.csv \
+  --out outputs/submission_catboost_gpu.csv \
+  --metrics-out outputs/metrics_catboost_gpu.json \
+  --val-predictions-out outputs/val_catboost_gpu
+```
