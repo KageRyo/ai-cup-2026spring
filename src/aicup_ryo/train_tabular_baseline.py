@@ -119,6 +119,12 @@ def prediction_frame(
     ).sort_values("rally_uid")
 
 
+def add_action_hint(x: pd.DataFrame, action_id) -> pd.DataFrame:
+    x = x.copy()
+    x["next_actionId_hint"] = np.asarray(action_id).ravel().astype("int16")
+    return x
+
+
 def save_validation_predictions(
     out_prefix: str,
     next_shot: pd.DataFrame,
@@ -251,13 +257,24 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
 
     print("Training action model...", flush=True)
     action_model.fit(x_train, train_part["target_actionId"])
+    val_action_pred = action_model.predict(x_val)
+    test_action_pred = action_model.predict(x_test)
+
+    if args.stack_point_action:
+        point_x_train = add_action_hint(x_train, train_part["target_actionId"])
+        point_x_val = add_action_hint(x_val, val_action_pred)
+        point_x_test = add_action_hint(x_test, test_action_pred)
+    else:
+        point_x_train = x_train
+        point_x_val = x_val
+        point_x_test = x_test
+
     print("Training point model...", flush=True)
-    point_model.fit(x_train, train_part["target_pointId"])
+    point_model.fit(point_x_train, train_part["target_pointId"])
     print("Training rally model on last known prefix per rally...", flush=True)
     rally_model.fit(x_rally_train, train_rally["serverGetPoint"])
 
-    val_action_pred = action_model.predict(x_val)
-    val_point_pred = point_model.predict(x_val)
+    val_point_pred = point_model.predict(point_x_val)
     val_rally_pred = rally_model.predict_proba(x_rally_val)[:, 1]
     metrics = score(
         val_part["target_actionId"],
@@ -277,6 +294,7 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
             "train_rallies": int(len(train_rally)),
             "val_rallies": int(len(val_rally)),
             "features": int(len(features)),
+            "stack_point_action": bool(args.stack_point_action),
         }
     )
     print(
@@ -303,16 +321,27 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
     if args.refit_full:
         print("Refitting models on all prefix samples...", flush=True)
         action_model = build_model("action", args).fit(samples[features], samples["target_actionId"])
-        point_model = build_model("point", args).fit(samples[features], samples["target_pointId"])
+        full_x = samples[features]
+        full_test_x = test_samples[features]
+        test_action_pred = action_model.predict(full_test_x)
+        if args.stack_point_action:
+            point_full_x = add_action_hint(full_x, samples["target_actionId"])
+            point_test_x = add_action_hint(full_test_x, test_action_pred)
+        else:
+            point_full_x = full_x
+            point_test_x = full_test_x
+        point_model = build_model("point", args).fit(point_full_x, samples["target_pointId"])
         rally_model = build_model("rally", args).fit(
             rally_samples[rally_features],
             rally_samples["serverGetPoint"],
         )
+    else:
+        point_test_x = point_x_test
 
     submission = prediction_frame(
         test_samples,
-        action_model.predict(x_test),
-        point_model.predict(x_test),
+        test_action_pred,
+        point_model.predict(point_test_x),
         rally_model.predict_proba(x_rally_test)[:, 1],
     )
     return metrics, submission
@@ -343,8 +372,9 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--verbose-eval", type=int, default=False)
     parser.add_argument("--metrics-out")
     parser.add_argument("--val-predictions-out")
+    parser.add_argument("--no-stack-point-action", dest="stack_point_action", action="store_false")
     parser.add_argument("--no-refit-full", dest="refit_full", action="store_false")
-    parser.set_defaults(refit_full=True)
+    parser.set_defaults(refit_full=True, stack_point_action=True)
     return parser.parse_args(argv)
 
 
