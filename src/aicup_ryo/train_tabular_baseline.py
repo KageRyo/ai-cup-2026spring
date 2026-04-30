@@ -61,6 +61,12 @@ def add_prefix_features(df: pd.DataFrame) -> pd.DataFrame:
         df[f"{col}_prefix_min"] = group[col].expanding().min().reset_index(level=0, drop=True)
         df[f"{col}_prefix_max"] = group[col].expanding().max().reset_index(level=0, drop=True)
 
+    df["action_transition"] = df["prev_actionId"] * 32 + df["actionId"]
+    df["point_transition"] = df["prev_pointId"] * 16 + df["pointId"]
+    df["spin_strength"] = df["spinId"] * 8 + df["strengthId"]
+    df["hand_position"] = df["handId"] * 8 + df["positionId"]
+    df["shot_context"] = df["strikeId"] * 128 + df["spinId"] * 16 + df["positionId"]
+
     return df
 
 
