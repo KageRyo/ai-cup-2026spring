@@ -37,7 +37,7 @@ aicup-tabular-baseline \
   --out outputs/submission_tabular_baseline.csv
 ```
 
-Run the CatBoost tabular experiment on both local GPUs:
+Run the current-best CatBoost tabular experiment on both local GPUs:
 
 ```bash
 aicup-tabular-baseline \
@@ -49,10 +49,16 @@ aicup-tabular-baseline \
   --cat-depth 8 \
   --train train.csv \
   --test test.csv \
-  --out outputs/submission_catboost_gpu_v4.csv \
-  --metrics-out outputs/metrics_catboost_gpu_v4.json \
-  --val-predictions-out outputs/val_catboost_gpu_v4
+  --out outputs/submission_catboost_gpu_v5.csv \
+  --metrics-out outputs/metrics_catboost_gpu_v5.json \
+  --val-predictions-out outputs/val_catboost_gpu_v5
 ```
+
+Current local validation best:
+
+- Model: CatBoost GPU with stacked point prediction and shot interaction features.
+- Settings: `--n-estimators 600 --learning-rate 0.03 --cat-depth 8`.
+- Score: `0.4187` (`f1_action=0.3341`, `f1_point=0.2129`, `auc=0.9995`).
 
 Audit validation signals and simple leakage risks:
 
