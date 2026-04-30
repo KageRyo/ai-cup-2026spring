@@ -44,11 +44,14 @@ aicup-tabular-baseline \
   --model catboost \
   --device gpu \
   --gpu-devices 0:1 \
+  --n-estimators 600 \
+  --learning-rate 0.03 \
+  --cat-depth 8 \
   --train train.csv \
   --test test.csv \
-  --out outputs/submission_catboost_gpu.csv \
-  --metrics-out outputs/metrics_catboost_gpu.json \
-  --val-predictions-out outputs/val_catboost_gpu
+  --out outputs/submission_catboost_gpu_v4.csv \
+  --metrics-out outputs/metrics_catboost_gpu_v4.json \
+  --val-predictions-out outputs/val_catboost_gpu_v4
 ```
 
 Audit validation signals and simple leakage risks:
