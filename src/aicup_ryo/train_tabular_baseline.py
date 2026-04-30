@@ -33,19 +33,33 @@ def add_prefix_features(df: pd.DataFrame) -> pd.DataFrame:
     group = df.groupby("rally_uid", sort=False)
 
     df["scoreDiff"] = df["scoreSelf"] - df["scoreOther"]
+    df["absScoreDiff"] = df["scoreDiff"].abs()
     df["scoreSum"] = df["scoreSelf"] + df["scoreOther"]
+    df["isTied"] = (df["scoreDiff"] == 0).astype("int8")
+    df["isLeading"] = (df["scoreDiff"] > 0).astype("int8")
+    df["isTrailing"] = (df["scoreDiff"] < 0).astype("int8")
+    df["isLatePoint"] = (df[["scoreSelf", "scoreOther"]].max(axis=1) >= 8).astype("int8")
+    df["isDeuceOrAd"] = (
+        (df["scoreSelf"] >= 10) & (df["scoreOther"] >= 10) & (df["absScoreDiff"] <= 1)
+    ).astype("int8")
     df["isServerStroke"] = (df["strikeNumber"] % 2 == 1).astype("int8")
     df["knownPrefixLen"] = group.cumcount() + 1
 
     for col in SHOT_COLUMNS:
         df[f"prev_{col}"] = group[col].shift(1).fillna(-1).astype("int16")
         df[f"prev2_{col}"] = group[col].shift(2).fillna(-1).astype("int16")
+        df[f"prev3_{col}"] = group[col].shift(3).fillna(-1).astype("int16")
+        df[f"{col}_prefix_value_count"] = df.groupby(["rally_uid", col], sort=False).cumcount() + 1
+        df[f"{col}_prefix_value_rate"] = df[f"{col}_prefix_value_count"] / df["knownPrefixLen"]
+        df[f"{col}_same_as_prev"] = (df[col] == df[f"prev_{col}"]).astype("int8")
 
     for col in ["actionId", "pointId", "strikeId"]:
         df[f"{col}_prefix_mean"] = group[col].expanding().mean().reset_index(level=0, drop=True)
         df[f"{col}_prefix_std"] = (
             group[col].expanding().std().reset_index(level=0, drop=True).fillna(0.0)
         )
+        df[f"{col}_prefix_min"] = group[col].expanding().min().reset_index(level=0, drop=True)
+        df[f"{col}_prefix_max"] = group[col].expanding().max().reset_index(level=0, drop=True)
 
     return df
 
