@@ -40,6 +40,7 @@ jobs:
           aicup-tabular-baseline --help
           aicup-lstm-baseline --help
           aicup-audit-validation --help
+          aicup-error-analysis --help
 
   docker-build:
     runs-on: ubuntu-latest

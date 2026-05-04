@@ -132,3 +132,21 @@ def test_train_and_predict_masks_single_split_oof_metrics():
     assert len(metrics["fold_metrics"]) == 1
     assert list(submission.columns) == ["rally_uid", "actionId", "pointId", "serverGetPoint"]
     assert len(submission) == test["rally_uid"].nunique()
+
+
+def test_train_and_predict_oof_exports_diagnostic_columns(tmp_path):
+    train = sample_match_frame()
+    test = train.groupby("rally_uid", sort=False).tail(1).copy().reset_index(drop=True)
+    prefix = tmp_path / "oof_smoke"
+
+    train_and_predict(base_args(cv_folds=1, save_oof=str(prefix)), train, test)
+
+    next_shot = pd.read_csv(tmp_path / "oof_smoke_next_shot.csv")
+    assert {
+        "match",
+        "strikeNumber",
+        "knownPrefixLen",
+        "scoreDiff",
+        "isLatePoint",
+        "is_final_prefix",
+    } <= set(next_shot.columns)

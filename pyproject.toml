@@ -25,12 +25,14 @@ dev = [
 
 [project.scripts]
 aicup-audit-validation = "audit_validation:main"
+aicup-error-analysis = "error_analysis:main"
 aicup-lstm-baseline = "train_lstm_baseline:main"
 aicup-tabular-baseline = "train_tabular_baseline:main"
 
 [tool.setuptools]
 py-modules = [
     "audit_validation",
+    "error_analysis",
     "train_lstm_baseline",
     "train_tabular_baseline",
 ]

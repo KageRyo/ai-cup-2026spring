@@ -121,3 +121,12 @@ aicup-audit-validation \
   --test test.csv \
   --out outputs/audit_validation.json
 ```
+
+Analyze OOF prediction errors after running with `--save-oof`:
+
+```bash
+aicup-error-analysis \
+  --next-shot-oof outputs/oof_catboost_5fold_v1_next_shot.csv \
+  --rally-oof outputs/oof_catboost_5fold_v1_rally.csv \
+  --out-dir outputs/error_analysis_catboost_5fold_v1
+```

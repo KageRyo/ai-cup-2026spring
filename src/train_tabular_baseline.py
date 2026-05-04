@@ -431,7 +431,16 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
 
     if args.val_predictions_out or args.save_oof:
         oof_prefix = args.save_oof or args.val_predictions_out
-        val_action_frame = samples[["rally_uid"]].copy()
+        diagnostic_cols = [
+            "rally_uid",
+            "match",
+            "strikeNumber",
+            "knownPrefixLen",
+            "scoreDiff",
+            "isLatePoint",
+            "is_final_prefix",
+        ]
+        val_action_frame = samples[diagnostic_cols].copy()
         val_action_frame["fold"] = oof_fold_id
         val_action_frame["actionId_true"] = samples["target_actionId"].astype(int).to_numpy()
         val_action_frame["pointId_true"] = samples["target_pointId"].astype(int).to_numpy()
