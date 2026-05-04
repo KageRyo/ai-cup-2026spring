@@ -10,7 +10,7 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.tree import DecisionTreeClassifier
 
-from aicup_ryo.train_tabular_baseline import (
+from train_tabular_baseline import (
     feature_columns,
     make_next_shot_samples,
     make_rally_samples,
