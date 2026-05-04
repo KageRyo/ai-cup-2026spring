@@ -15,7 +15,7 @@ lint:
 	ruff check src
 
 pycompile:
-	$(PYTHON) -m py_compile src/aicup_ryo/*.py
+	$(PYTHON) -m py_compile src/*.py
 
 tabular-help:
 	aicup-tabular-baseline --help

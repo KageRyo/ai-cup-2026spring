@@ -385,13 +385,18 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
         oof_fold_id[val_part.index.to_numpy()] = fold_id
         oof_rally_fold_id[val_rally.index.to_numpy()] = fold_id
 
+    next_mask = oof_fold_id >= 0
+    rally_mask = oof_rally_fold_id >= 0
+    if not next_mask.any() or not rally_mask.any():
+        raise ValueError("No validation predictions were generated for OOF scoring.")
+
     metrics = score(
-        samples["target_actionId"],
-        oof_action_pred,
-        samples["target_pointId"],
-        oof_point_pred,
-        rally_samples["serverGetPoint"],
-        oof_rally_pred,
+        samples.loc[next_mask, "target_actionId"],
+        oof_action_pred[next_mask],
+        samples.loc[next_mask, "target_pointId"],
+        oof_point_pred[next_mask],
+        rally_samples.loc[rally_mask, "serverGetPoint"],
+        oof_rally_pred[rally_mask],
     )
     metrics.update(
         {
@@ -407,6 +412,8 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
             "action_class_weights": args.action_class_weights,
             "point_class_weights": args.point_class_weights,
             "fold_metrics": fold_metrics,
+            "oof_prefix_samples_scored": int(next_mask.sum()),
+            "oof_rallies_scored": int(rally_mask.sum()),
         }
     )
     metrics.update(summarize_fold_metrics(fold_metrics))
