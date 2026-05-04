@@ -68,7 +68,7 @@ docker run --rm \
 GitHub Actions now covers:
 
 - `CI`: install, `ruff`, `py_compile`, CLI `--help` smoke checks, and Docker build validation.
-- `Docker Publish`: build and publish both CPU and GPU images to `ghcr.io/<owner>/<repo>` on pushes to `main` and on manual dispatch.
+- `Docker Publish`: manually build and publish both CPU and GPU images to `ghcr.io/<owner>/<repo>` via workflow dispatch.
 
 ## Baseline
 
