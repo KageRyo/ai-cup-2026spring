@@ -17,6 +17,59 @@ Install the package after dependencies are ready:
 python -m pip install -e .
 ```
 
+For local checks and CI-equivalent commands:
+
+```bash
+make install-dev
+make check
+```
+
+## Docker
+
+Build a CPU image that includes the package and CLI entry points:
+
+```bash
+docker build -t ai-cup-ryo:local .
+```
+
+Run the default help command:
+
+```bash
+docker run --rm ai-cup-ryo:local
+```
+
+Build a GPU image for local CUDA training hosts such as this 2x4090 machine:
+
+```bash
+docker build -f Dockerfile.gpu -t ai-cup-ryo:gpu-local .
+```
+
+Run the GPU image with NVIDIA runtime:
+
+```bash
+docker run --rm --gpus all ai-cup-ryo:gpu-local
+```
+
+Mount local competition data when you want to run an experiment from the container:
+
+```bash
+docker run --rm \
+  -v "$PWD:/app" \
+  ai-cup-ryo:local \
+  --train train.csv \
+  --test test.csv \
+  --out outputs/submission_tabular_baseline.csv
+```
+
+`Dockerfile` is the portable CPU image used by CI. `Dockerfile.gpu` is the CUDA image for local GPU training and GPU-capable deployment hosts.
+
+## CI/CD
+
+GitHub Actions now covers:
+
+- `CI`: install, `ruff`, `py_compile`, CLI `--help` smoke checks, and Docker build validation.
+- `Docker Publish`: build and publish both CPU and GPU images to `ghcr.io/<owner>/<repo>` on pushes to `main` and on manual dispatch.
+
 ## Baseline
 
 Run the LSTM baseline:
