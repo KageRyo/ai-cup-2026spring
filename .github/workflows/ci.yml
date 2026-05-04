@@ -30,7 +30,7 @@ jobs:
         run: ruff check src
 
       - name: Syntax check
-        run: python -m py_compile src/aicup_ryo/*.py
+        run: python -m py_compile src/*.py
 
       - name: CLI smoke checks
         run: |
