@@ -32,6 +32,9 @@ jobs:
       - name: Syntax check
         run: python -m py_compile src/*.py
 
+      - name: Pytest
+        run: pytest
+
       - name: CLI smoke checks
         run: |
           aicup-tabular-baseline --help
