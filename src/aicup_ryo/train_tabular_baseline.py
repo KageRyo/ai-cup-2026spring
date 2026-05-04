@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.metrics import f1_score, roc_auc_score
-from sklearn.model_selection import GroupShuffleSplit
+from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 
 
 SEED = 42
@@ -80,7 +80,7 @@ def make_next_shot_samples(train: pd.DataFrame) -> pd.DataFrame:
     samples["target_actionId"] = samples["target_actionId"].astype("int16")
     samples["target_pointId"] = samples["target_pointId"].astype("int16")
     samples["serverGetPoint"] = samples["serverGetPoint"].astype("int8")
-    return samples
+    return samples.reset_index(drop=True)
 
 
 def make_rally_samples(train: pd.DataFrame) -> pd.DataFrame:
@@ -89,12 +89,12 @@ def make_rally_samples(train: pd.DataFrame) -> pd.DataFrame:
     featured["is_final_prefix"] = group.cumcount() == (group["rally_uid"].transform("size") - 2)
     samples = featured[featured["is_final_prefix"]].copy()
     samples["serverGetPoint"] = samples["serverGetPoint"].astype("int8")
-    return samples
+    return samples.reset_index(drop=True)
 
 
 def make_test_samples(test: pd.DataFrame) -> pd.DataFrame:
     featured = add_prefix_features(test)
-    return featured.groupby("rally_uid", sort=False).tail(1).copy()
+    return featured.groupby("rally_uid", sort=False).tail(1).copy().reset_index(drop=True)
 
 
 def feature_columns(frame: pd.DataFrame) -> list[str]:
@@ -146,6 +146,47 @@ def save_validation_predictions(
         f"Saved validation predictions to: {next_shot_path} and {rally_path}",
         flush=True,
     )
+
+
+def aligned_predict_proba(model, frame: pd.DataFrame, labels: np.ndarray) -> np.ndarray:
+    proba = np.asarray(model.predict_proba(frame))
+    if proba.ndim == 1:
+        proba = np.column_stack([1.0 - proba, proba])
+    aligned = np.zeros((len(frame), len(labels)), dtype=np.float64)
+    model_classes = np.asarray(model.classes_)
+    for idx, label in enumerate(labels):
+        matches = np.where(model_classes == label)[0]
+        if matches.size:
+            aligned[:, idx] = proba[:, matches[0]]
+    return aligned
+
+
+def predict_from_proba(labels: np.ndarray, proba: np.ndarray) -> np.ndarray:
+    return labels[np.argmax(proba, axis=1)]
+
+
+def build_group_splits(args, rally_samples: pd.DataFrame) -> list[tuple[np.ndarray, np.ndarray]]:
+    groups = rally_samples["match"].to_numpy()
+    unique_groups = np.unique(groups)
+    if args.cv_folds > 1:
+        if len(unique_groups) < args.cv_folds:
+            raise ValueError(
+                f"Requested cv_folds={args.cv_folds}, but only {len(unique_groups)} unique matches exist."
+            )
+        splitter = GroupKFold(n_splits=args.cv_folds)
+        return list(splitter.split(rally_samples, groups=groups))
+
+    splitter = GroupShuffleSplit(n_splits=1, test_size=args.val_size, random_state=args.seed)
+    return list(splitter.split(rally_samples, groups=groups))
+
+
+def summarize_fold_metrics(fold_metrics: list[dict[str, float]]) -> dict[str, float]:
+    summary: dict[str, float] = {}
+    for key in ["f1_action", "f1_point", "auc", "score"]:
+        values = np.asarray([fold[key] for fold in fold_metrics], dtype=np.float64)
+        summary[f"{key}_mean"] = float(values.mean())
+        summary[f"{key}_std"] = float(values.std(ddof=0))
+    return summary
 
 
 def score(action_true, action_pred, point_true, point_pred, rally_true, rally_pred) -> dict[str, float]:
@@ -243,96 +284,160 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
         flush=True,
     )
 
-    splitter = GroupShuffleSplit(n_splits=1, test_size=args.val_size, random_state=args.seed)
-    train_rally_idx, val_rally_idx = next(splitter.split(rally_samples, groups=rally_samples["match"]))
-    train_matches = set(rally_samples.iloc[train_rally_idx]["match"].unique())
-    val_matches = set(rally_samples.iloc[val_rally_idx]["match"].unique())
-
-    train_part = samples[samples["match"].isin(train_matches)].copy()
-    val_part = samples[samples["match"].isin(val_matches)].copy()
-    train_rally = rally_samples.iloc[train_rally_idx].copy()
-    val_rally = rally_samples.iloc[val_rally_idx].copy()
-    print(
-        f"Train matches={len(train_matches)} | val matches={len(val_matches)} | "
-        f"val rallies={len(val_rally)}",
-        flush=True,
-    )
-
-    x_train = train_part[features]
-    x_val = val_part[features]
+    splits = build_group_splits(args, rally_samples)
+    action_labels = np.sort(samples["target_actionId"].unique())
+    point_labels = np.sort(samples["target_pointId"].unique())
+    rally_labels = np.array([0, 1], dtype=np.int8)
     x_test = test_samples[features]
-    x_rally_train = train_rally[rally_features]
-    x_rally_val = val_rally[rally_features]
     x_rally_test = test_samples[rally_features]
 
-    action_model = build_model("action", args)
-    point_model = build_model("point", args)
-    rally_model = build_model("rally", args)
+    oof_action_pred = np.full(len(samples), -1, dtype=np.int32)
+    oof_point_pred = np.full(len(samples), -1, dtype=np.int32)
+    oof_rally_pred = np.full(len(rally_samples), np.nan, dtype=np.float64)
+    oof_fold_id = np.full(len(samples), -1, dtype=np.int16)
+    oof_rally_fold_id = np.full(len(rally_samples), -1, dtype=np.int16)
+    fold_metrics: list[dict[str, float]] = []
 
-    print("Training action model...", flush=True)
-    action_model.fit(x_train, train_part["target_actionId"])
-    val_action_pred = action_model.predict(x_val)
-    test_action_pred = action_model.predict(x_test)
+    test_action_proba_sum = np.zeros((len(test_samples), len(action_labels)), dtype=np.float64)
+    test_point_proba_sum = np.zeros((len(test_samples), len(point_labels)), dtype=np.float64)
+    test_rally_proba_sum = np.zeros((len(test_samples), len(rally_labels)), dtype=np.float64)
 
-    if args.stack_point_action:
-        point_x_train = add_action_hint(x_train, train_part["target_actionId"])
-        point_x_val = add_action_hint(x_val, val_action_pred)
-        point_x_test = add_action_hint(x_test, test_action_pred)
-    else:
-        point_x_train = x_train
-        point_x_val = x_val
-        point_x_test = x_test
+    for fold_id, (train_rally_idx, val_rally_idx) in enumerate(splits):
+        train_matches = set(rally_samples.iloc[train_rally_idx]["match"].unique())
+        val_matches = set(rally_samples.iloc[val_rally_idx]["match"].unique())
 
-    print("Training point model...", flush=True)
-    point_model.fit(point_x_train, train_part["target_pointId"])
-    print("Training rally model on last known prefix per rally...", flush=True)
-    rally_model.fit(x_rally_train, train_rally["serverGetPoint"])
+        train_part = samples[samples["match"].isin(train_matches)].copy()
+        val_part = samples[samples["match"].isin(val_matches)].copy()
+        train_rally = rally_samples.iloc[train_rally_idx].copy()
+        val_rally = rally_samples.iloc[val_rally_idx].copy()
+        print(
+            f"Fold {fold_id}: train matches={len(train_matches)} | val matches={len(val_matches)} | "
+            f"train prefixes={len(train_part)} | val prefixes={len(val_part)} | "
+            f"val rallies={len(val_rally)}",
+            flush=True,
+        )
 
-    val_point_pred = point_model.predict(point_x_val)
-    val_rally_pred = rally_model.predict_proba(x_rally_val)[:, 1]
+        x_train = train_part[features]
+        x_val = val_part[features]
+        x_rally_train = train_rally[rally_features]
+        x_rally_val = val_rally[rally_features]
+
+        action_model = build_model("action", args)
+        point_model = build_model("point", args)
+        rally_model = build_model("rally", args)
+
+        print(f"Fold {fold_id}: training action model...", flush=True)
+        action_model.fit(x_train, train_part["target_actionId"])
+        val_action_pred = np.asarray(action_model.predict(x_val)).ravel().astype(np.int32)
+        test_action_proba = aligned_predict_proba(action_model, x_test, action_labels)
+        test_action_proba_sum += test_action_proba
+        test_action_pred = predict_from_proba(action_labels, test_action_proba)
+
+        if args.stack_point_action:
+            point_x_train = add_action_hint(x_train, train_part["target_actionId"])
+            point_x_val = add_action_hint(x_val, val_action_pred)
+            point_x_test = add_action_hint(x_test, test_action_pred)
+        else:
+            point_x_train = x_train
+            point_x_val = x_val
+            point_x_test = x_test
+
+        print(f"Fold {fold_id}: training point model...", flush=True)
+        point_model.fit(point_x_train, train_part["target_pointId"])
+        val_point_pred = np.asarray(point_model.predict(point_x_val)).ravel().astype(np.int32)
+        test_point_proba_sum += aligned_predict_proba(point_model, point_x_test, point_labels)
+
+        print(f"Fold {fold_id}: training rally model on last known prefix per rally...", flush=True)
+        rally_model.fit(x_rally_train, train_rally["serverGetPoint"])
+        val_rally_proba = aligned_predict_proba(rally_model, x_rally_val, rally_labels)[:, 1]
+        test_rally_proba_sum += aligned_predict_proba(rally_model, x_rally_test, rally_labels)
+
+        fold_metric = score(
+            val_part["target_actionId"],
+            val_action_pred,
+            val_part["target_pointId"],
+            val_point_pred,
+            val_rally["serverGetPoint"],
+            val_rally_proba,
+        )
+        fold_metric.update(
+            {
+                "fold": fold_id,
+                "train_matches": int(len(train_matches)),
+                "val_matches": int(len(val_matches)),
+                "train_prefix_samples": int(len(train_part)),
+                "val_prefix_samples": int(len(val_part)),
+                "train_rallies": int(len(train_rally)),
+                "val_rallies": int(len(val_rally)),
+            }
+        )
+        fold_metrics.append(fold_metric)
+        print(
+            f"Fold {fold_id}: F1_action={fold_metric['f1_action']:.4f} "
+            f"F1_point={fold_metric['f1_point']:.4f} AUC={fold_metric['auc']:.4f} "
+            f"score={fold_metric['score']:.4f}",
+            flush=True,
+        )
+
+        oof_action_pred[val_part.index.to_numpy()] = val_action_pred
+        oof_point_pred[val_part.index.to_numpy()] = val_point_pred
+        oof_rally_pred[val_rally.index.to_numpy()] = val_rally_proba
+        oof_fold_id[val_part.index.to_numpy()] = fold_id
+        oof_rally_fold_id[val_rally.index.to_numpy()] = fold_id
+
     metrics = score(
-        val_part["target_actionId"],
-        val_action_pred,
-        val_part["target_pointId"],
-        val_point_pred,
-        val_rally["serverGetPoint"],
-        val_rally_pred,
+        samples["target_actionId"],
+        oof_action_pred,
+        samples["target_pointId"],
+        oof_point_pred,
+        rally_samples["serverGetPoint"],
+        oof_rally_pred,
     )
     metrics.update(
         {
             "model": args.model,
             "seed": args.seed,
             "val_size": args.val_size,
-            "train_prefix_samples": int(len(train_part)),
-            "val_prefix_samples": int(len(val_part)),
-            "train_rallies": int(len(train_rally)),
-            "val_rallies": int(len(val_rally)),
+            "cv_folds": int(args.cv_folds),
+            "cv_strategy": "GroupKFold" if args.cv_folds > 1 else "GroupShuffleSplit",
+            "train_prefix_samples": int(len(samples)),
+            "train_rallies": int(len(rally_samples)),
             "features": int(len(features)),
             "stack_point_action": bool(args.stack_point_action),
             "action_class_weights": args.action_class_weights,
             "point_class_weights": args.point_class_weights,
+            "fold_metrics": fold_metrics,
         }
     )
+    metrics.update(summarize_fold_metrics(fold_metrics))
     print(
-        f"Validation F1_action={metrics['f1_action']:.4f} "
+        f"OOF F1_action={metrics['f1_action']:.4f} "
         f"F1_point={metrics['f1_point']:.4f} AUC={metrics['auc']:.4f} "
         f"score={metrics['score']:.4f}",
         flush=True,
     )
+    if args.cv_folds > 1:
+        print(
+            f"CV mean score={metrics['score_mean']:.4f} std={metrics['score_std']:.4f}",
+            flush=True,
+        )
 
-    if args.val_predictions_out:
-        val_action_frame = val_part[["rally_uid"]].copy()
-        val_action_frame["actionId_true"] = val_part["target_actionId"].astype(int).to_numpy()
-        val_action_frame["pointId_true"] = val_part["target_pointId"].astype(int).to_numpy()
-        val_action_frame["actionId_pred"] = np.asarray(val_action_pred).ravel().astype(int)
-        val_action_frame["pointId_pred"] = np.asarray(val_point_pred).ravel().astype(int)
+    if args.val_predictions_out or args.save_oof:
+        oof_prefix = args.save_oof or args.val_predictions_out
+        val_action_frame = samples[["rally_uid"]].copy()
+        val_action_frame["fold"] = oof_fold_id
+        val_action_frame["actionId_true"] = samples["target_actionId"].astype(int).to_numpy()
+        val_action_frame["pointId_true"] = samples["target_pointId"].astype(int).to_numpy()
+        val_action_frame["actionId_pred"] = oof_action_pred.astype(int)
+        val_action_frame["pointId_pred"] = oof_point_pred.astype(int)
 
-        val_rally_frame = val_rally[["rally_uid", "serverGetPoint"]].rename(
+        val_rally_frame = rally_samples[["rally_uid", "serverGetPoint"]].rename(
             columns={"serverGetPoint": "serverGetPoint_true"}
         )
-        val_rally_frame["serverGetPoint_pred"] = val_rally_pred
+        val_rally_frame["fold"] = oof_rally_fold_id
+        val_rally_frame["serverGetPoint_pred"] = oof_rally_pred
 
-        save_validation_predictions(args.val_predictions_out, val_action_frame, val_rally_frame)
+        save_validation_predictions(oof_prefix, val_action_frame, val_rally_frame)
 
     if args.refit_full:
         print("Refitting models on all prefix samples...", flush=True)
@@ -351,14 +456,18 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
             rally_samples[rally_features],
             rally_samples["serverGetPoint"],
         )
+        test_point_pred = point_model.predict(point_test_x)
+        test_rally_pred = rally_model.predict_proba(x_rally_test)[:, 1]
     else:
-        point_test_x = point_x_test
+        test_action_pred = predict_from_proba(action_labels, test_action_proba_sum)
+        test_point_pred = predict_from_proba(point_labels, test_point_proba_sum)
+        test_rally_pred = test_rally_proba_sum[:, 1] / max(len(splits), 1)
 
     submission = prediction_frame(
         test_samples,
         test_action_pred,
-        point_model.predict(point_test_x),
-        rally_model.predict_proba(x_rally_test)[:, 1],
+        test_point_pred,
+        test_rally_pred,
     )
     return metrics, submission
 
@@ -372,6 +481,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--device", choices=["cpu", "gpu"], default="cpu")
     parser.add_argument("--gpu-devices", default="0:1")
     parser.add_argument("--val-size", type=float, default=0.15)
+    parser.add_argument("--cv-folds", type=int, default=1)
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--max-iter", type=int, default=250)
     parser.add_argument("--learning-rate", type=float, default=0.05)
@@ -388,6 +498,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--verbose-eval", type=int, default=False)
     parser.add_argument("--metrics-out")
     parser.add_argument("--val-predictions-out")
+    parser.add_argument("--save-oof")
     parser.add_argument("--action-class-weights", choices=["balanced", "none"], default="balanced")
     parser.add_argument("--point-class-weights", choices=["balanced", "none"], default="balanced")
     parser.add_argument("--no-stack-point-action", dest="stack_point_action", action="store_false")
