@@ -11,7 +11,6 @@ from sklearn.metrics import f1_score, roc_auc_score
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 
 from data_contract import (
-    BASE_COLUMNS,
     SHOT_COLUMNS,
     SUBMISSION_COLUMNS,
     default_test_path,
