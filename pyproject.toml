@@ -32,6 +32,7 @@ aicup-tabular-baseline = "train_tabular_baseline:main"
 [tool.setuptools]
 py-modules = [
     "audit_validation",
+    "data_contract",
     "error_analysis",
     "train_lstm_baseline",
     "train_tabular_baseline",

@@ -13,6 +13,13 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
+from data_contract import (
+    SUBMISSION_COLUMNS,
+    default_test_path,
+    load_test_csv,
+    load_train_csv,
+    validate_submission,
+)
 
 SEED = 42
 PAD_TOKEN = 0
@@ -30,7 +37,6 @@ FEATURES = [
     "scoreOther",
     "strikeNumber",
 ]
-SUBMISSION_COLUMNS = ["rally_uid", "actionId", "pointId", "serverGetPoint"]
 
 
 class RallyDataset(Dataset):
@@ -344,7 +350,7 @@ def predict(model, test: pd.DataFrame, encode_frame, action_classes, point_class
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", default="train.csv")
-    parser.add_argument("--test", default="test.csv")
+    parser.add_argument("--test", default=default_test_path())
     parser.add_argument("--out", default="outputs/submission_lstm_baseline.csv")
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch", type=int, default=64)
@@ -364,9 +370,9 @@ def main(argv: list[str] | None = None) -> None:
     set_seed(args.seed)
 
     print(f"Loading train data from {args.train}", flush=True)
-    train = pd.read_csv(args.train).sort_values(["rally_uid", "strikeNumber"])
+    train = load_train_csv(args.train)
     print(f"Loading test data from {args.test}", flush=True)
-    test = pd.read_csv(args.test).sort_values(["rally_uid", "strikeNumber"])
+    test = load_test_csv(args.test)
     train["strikeNumber"] = train["strikeNumber"].clip(0, 40)
     test["strikeNumber"] = test["strikeNumber"].clip(0, 40)
     print(
@@ -379,6 +385,7 @@ def main(argv: list[str] | None = None) -> None:
         args, train
     )
     submission = predict(model, test, encode_frame, action_classes, point_classes, max_len, device)
+    validate_submission(submission, test)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

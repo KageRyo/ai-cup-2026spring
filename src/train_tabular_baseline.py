@@ -10,22 +10,17 @@ from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassif
 from sklearn.metrics import f1_score, roc_auc_score
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 
+from data_contract import (
+    BASE_COLUMNS,
+    SHOT_COLUMNS,
+    SUBMISSION_COLUMNS,
+    default_test_path,
+    load_test_csv,
+    load_train_csv,
+    validate_submission,
+)
 
 SEED = 42
-SUBMISSION_COLUMNS = ["rally_uid", "actionId", "pointId", "serverGetPoint"]
-SHOT_COLUMNS = ["strikeId", "handId", "strengthId", "spinId", "pointId", "actionId", "positionId"]
-BASE_COLUMNS = [
-    "sex",
-    "match",
-    "numberGame",
-    "rally_id",
-    "strikeNumber",
-    "scoreSelf",
-    "scoreOther",
-    "gamePlayerId",
-    "gamePlayerOtherId",
-    *SHOT_COLUMNS,
-]
 
 
 def add_prefix_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -491,7 +486,7 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", default="train.csv")
-    parser.add_argument("--test", default="test.csv")
+    parser.add_argument("--test", default=default_test_path())
     parser.add_argument("--out", default="outputs/submission_tabular_baseline.csv")
     parser.add_argument("--model", choices=["hgb", "rf", "lightgbm", "catboost"], default="lightgbm")
     parser.add_argument("--device", choices=["cpu", "gpu"], default="cpu")
@@ -526,10 +521,11 @@ def parse_args(argv: list[str] | None = None):
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     print(f"Loading train data from {args.train}", flush=True)
-    train = pd.read_csv(args.train)
+    train = load_train_csv(args.train)
     print(f"Loading test data from {args.test}", flush=True)
-    test = pd.read_csv(args.test)
+    test = load_test_csv(args.test)
     metrics, submission = train_and_predict(args, train, test)
+    validate_submission(submission, test)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

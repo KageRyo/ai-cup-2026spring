@@ -72,13 +72,18 @@ GitHub Actions now covers:
 
 ## Baseline
 
+The competition released a refreshed test set on 2026-05-06. Put it at `test_new.csv`;
+the CLIs now use `test_new.csv` by default when it exists, falling back to `test.csv`
+only for older local runs. Treat `rally_uid` only as an identifier. Its numeric order
+is randomized and must not be used as rally sequence information.
+
 Run the LSTM baseline:
 
 ```bash
 aicup-lstm-baseline \
   --train train.csv \
-  --test test.csv \
-  --out outputs/submission_lstm_baseline.csv
+  --test test_new.csv \
+  --out outputs/submission_lstm_test_new.csv
 ```
 
 Run the sklearn tabular experiment:
@@ -86,8 +91,8 @@ Run the sklearn tabular experiment:
 ```bash
 aicup-tabular-baseline \
   --train train.csv \
-  --test test.csv \
-  --out outputs/submission_tabular_baseline.csv
+  --test test_new.csv \
+  --out outputs/submission_tabular_test_new.csv
 ```
 
 Run the current-best CatBoost tabular experiment on both local GPUs:
@@ -101,10 +106,10 @@ aicup-tabular-baseline \
   --learning-rate 0.03 \
   --cat-depth 8 \
   --train train.csv \
-  --test test.csv \
-  --out outputs/submission_catboost_gpu_v5.csv \
-  --metrics-out outputs/metrics_catboost_gpu_v5.json \
-  --val-predictions-out outputs/val_catboost_gpu_v5
+  --test test_new.csv \
+  --out outputs/submission_catboost_gpu_test_new_v1.csv \
+  --metrics-out outputs/metrics_catboost_gpu_test_new_v1.json \
+  --val-predictions-out outputs/val_catboost_gpu_test_new_v1
 ```
 
 Current local validation best:
@@ -118,8 +123,8 @@ Audit validation signals and simple leakage risks:
 ```bash
 aicup-audit-validation \
   --train train.csv \
-  --test test.csv \
-  --out outputs/audit_validation.json
+  --test test_new.csv \
+  --out outputs/audit_validation_test_new.json
 ```
 
 Analyze OOF prediction errors after running with `--save-oof`:

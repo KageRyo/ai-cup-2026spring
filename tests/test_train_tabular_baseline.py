@@ -4,6 +4,13 @@ from types import SimpleNamespace
 
 import pandas as pd
 
+from data_contract import (
+    SUBMISSION_COLUMNS,
+    default_test_path,
+    load_test_csv,
+    load_train_csv,
+    validate_submission,
+)
 from train_tabular_baseline import (
     build_group_splits,
     feature_columns,
@@ -150,3 +157,35 @@ def test_train_and_predict_oof_exports_diagnostic_columns(tmp_path):
         "isLatePoint",
         "is_final_prefix",
     } <= set(next_shot.columns)
+
+
+def test_data_contract_loads_sorts_and_validates_submission(tmp_path, monkeypatch):
+    train_path = tmp_path / "train.csv"
+    test_path = tmp_path / "test_new.csv"
+    frame = sample_match_frame().sample(frac=1.0, random_state=7)
+    frame.to_csv(train_path, index=False)
+    frame.drop(columns=["serverGetPoint"]).to_csv(test_path, index=False)
+
+    monkeypatch.chdir(tmp_path)
+
+    assert default_test_path() == "test_new.csv"
+
+    train = load_train_csv(train_path)
+    test = load_test_csv(test_path)
+    assert train[["rally_uid", "strikeNumber"]].equals(
+        train[["rally_uid", "strikeNumber"]].sort_values(
+            ["rally_uid", "strikeNumber"],
+            kind="mergesort",
+        ).reset_index(drop=True)
+    )
+
+    submission = pd.DataFrame(
+        {
+            "rally_uid": sorted(test["rally_uid"].unique()),
+            "actionId": 1,
+            "pointId": 1,
+            "serverGetPoint": 0.5,
+        },
+        columns=SUBMISSION_COLUMNS,
+    )
+    validate_submission(submission, test)

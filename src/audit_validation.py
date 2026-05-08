@@ -9,6 +9,7 @@ from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.tree import DecisionTreeClassifier
 
+from data_contract import default_test_path, load_test_csv, load_train_csv
 from train_tabular_baseline import (
     feature_columns,
     make_next_shot_samples,
@@ -74,8 +75,8 @@ def exact_next_shot_rules(val: pd.DataFrame) -> list[dict]:
 
 
 def audit(args) -> dict:
-    train = pd.read_csv(args.train)
-    test = pd.read_csv(args.test)
+    train = load_train_csv(args.train)
+    test = load_test_csv(args.test)
 
     next_shot = make_next_shot_samples(train)
     rally = make_rally_samples(train)
@@ -108,7 +109,7 @@ def audit(args) -> dict:
 def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--train", default="train.csv")
-    parser.add_argument("--test", default="test.csv")
+    parser.add_argument("--test", default=default_test_path())
     parser.add_argument("--out", default="outputs/audit_validation.json")
     parser.add_argument("--val-size", type=float, default=0.15)
     parser.add_argument("--seed", type=int, default=SEED)
