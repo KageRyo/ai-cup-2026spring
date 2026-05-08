@@ -13,7 +13,9 @@ from data_contract import (
     validate_submission,
 )
 from train_tabular_baseline import (
+    add_empirical_next_shot_features,
     build_group_splits,
+    empirical_feature_names,
     feature_columns,
     make_next_shot_samples,
     make_rally_samples,
@@ -84,6 +86,7 @@ def base_args(**overrides):
         val_predictions_out=None,
         save_oof=None,
         models_out_dir=None,
+        transition_features=False,
         action_class_weights="none",
         point_class_weights="none",
         stack_point_action=False,
@@ -176,6 +179,26 @@ def test_train_and_predict_saves_refit_models(tmp_path):
     assert metadata["stack_point_action"] is False
     assert metadata["features"]
     assert metadata["rally_features"]
+
+
+def test_empirical_next_shot_features_are_fold_safe():
+    samples = make_next_shot_samples(sample_match_frame())
+    enriched = add_empirical_next_shot_features(samples, samples, leave_one_out=True)
+
+    names = empirical_feature_names()
+    assert set(names) <= set(enriched.columns)
+    assert enriched[names].isna().sum().sum() == 0
+    assert (enriched.filter(like="_count") >= 0).all().all()
+
+
+def test_train_and_predict_with_transition_features():
+    train = sample_match_frame()
+    test = train.groupby("rally_uid", sort=False).tail(1).copy().reset_index(drop=True)
+
+    metrics, submission = train_and_predict(base_args(cv_folds=1, transition_features=True), train, test)
+
+    assert metrics["features"] > len(feature_columns(make_next_shot_samples(train)))
+    assert len(submission) == test["rally_uid"].nunique()
 
 
 def test_data_contract_loads_sorts_and_validates_submission(tmp_path, monkeypatch):

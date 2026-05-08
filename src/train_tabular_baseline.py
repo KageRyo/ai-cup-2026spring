@@ -21,6 +21,20 @@ from data_contract import (
 )
 
 SEED = 42
+ACTION_TRANSITION_CONTEXTS = [
+    ("actionId",),
+    ("strikeId", "actionId"),
+    ("strikeId", "actionId", "spinId"),
+    ("prev_actionId", "actionId"),
+    ("handId", "spinId", "positionId"),
+]
+POINT_TRANSITION_CONTEXTS = [
+    ("pointId",),
+    ("actionId", "pointId"),
+    ("strikeId", "pointId"),
+    ("actionId", "spinId", "pointId"),
+    ("prev_pointId", "pointId"),
+]
 
 
 def add_prefix_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -124,6 +138,114 @@ def add_action_hint(x: pd.DataFrame, action_id) -> pd.DataFrame:
     x = x.copy()
     x["next_actionId_hint"] = np.asarray(action_id).ravel().astype("int16")
     return x
+
+
+def empirical_feature_names() -> list[str]:
+    names = []
+    for target_prefix, contexts in [
+        ("emp_action", ACTION_TRANSITION_CONTEXTS),
+        ("emp_point", POINT_TRANSITION_CONTEXTS),
+    ]:
+        for idx, _ in enumerate(contexts):
+            base = f"{target_prefix}_ctx{idx}"
+            names.extend([f"{base}_pred", f"{base}_conf", f"{base}_count", f"{base}_entropy"])
+    return names
+
+
+def context_key(row: pd.Series, columns: tuple[str, ...]) -> tuple:
+    return tuple(row[col] for col in columns)
+
+
+def distribution_summary(counts: dict[int, int]) -> tuple[int, float, int, float]:
+    total = int(sum(counts.values()))
+    if total <= 0:
+        return -1, 0.0, 0, 0.0
+    pred, best_count = max(counts.items(), key=lambda item: (item[1], -item[0]))
+    probs = np.asarray(list(counts.values()), dtype=np.float64) / total
+    entropy = float(-(probs * np.log(probs + 1e-12)).sum())
+    return int(pred), float(best_count / total), total, entropy
+
+
+def build_context_counts(
+    stats_frame: pd.DataFrame,
+    target: str,
+    contexts: list[tuple[str, ...]],
+) -> list[dict[tuple, dict[int, int]]]:
+    context_counts = []
+    for context in contexts:
+        counts: dict[tuple, dict[int, int]] = {}
+        grouped = stats_frame.groupby(list(context) + [target], sort=False).size()
+        for key, value in grouped.items():
+            if not isinstance(key, tuple):
+                key = (key,)
+            context_key_value = key[: len(context)]
+            label = int(key[-1])
+            counts.setdefault(context_key_value, {})[label] = int(value)
+        context_counts.append(counts)
+    return context_counts
+
+
+def add_empirical_target_features(
+    frame: pd.DataFrame,
+    stats_frame: pd.DataFrame,
+    target: str,
+    contexts: list[tuple[str, ...]],
+    prefix: str,
+    leave_one_out: bool,
+) -> pd.DataFrame:
+    out = frame.copy()
+    context_counts = build_context_counts(stats_frame, target, contexts)
+    global_counts = stats_frame[target].value_counts().astype(int).to_dict()
+
+    for idx, context in enumerate(contexts):
+        pred_values, conf_values, count_values, entropy_values = [], [], [], []
+        counts_by_key = context_counts[idx]
+
+        for row_idx, row in frame.iterrows():
+            key = context_key(row, context)
+            counts = dict(counts_by_key.get(key, global_counts))
+            if leave_one_out and target in frame.columns:
+                label = int(frame.at[row_idx, target])
+                if label in counts:
+                    counts[label] -= 1
+                    if counts[label] <= 0:
+                        del counts[label]
+            pred, conf, count, entropy = distribution_summary(counts)
+            pred_values.append(pred)
+            conf_values.append(conf)
+            count_values.append(count)
+            entropy_values.append(entropy)
+
+        base = f"{prefix}_ctx{idx}"
+        out[f"{base}_pred"] = np.asarray(pred_values, dtype=np.int16)
+        out[f"{base}_conf"] = np.asarray(conf_values, dtype=np.float32)
+        out[f"{base}_count"] = np.log1p(np.asarray(count_values, dtype=np.float32))
+        out[f"{base}_entropy"] = np.asarray(entropy_values, dtype=np.float32)
+
+    return out
+
+
+def add_empirical_next_shot_features(
+    frame: pd.DataFrame,
+    stats_frame: pd.DataFrame,
+    leave_one_out: bool = False,
+) -> pd.DataFrame:
+    out = add_empirical_target_features(
+        frame,
+        stats_frame,
+        target="target_actionId",
+        contexts=ACTION_TRANSITION_CONTEXTS,
+        prefix="emp_action",
+        leave_one_out=leave_one_out,
+    )
+    return add_empirical_target_features(
+        out,
+        stats_frame,
+        target="target_pointId",
+        contexts=POINT_TRANSITION_CONTEXTS,
+        prefix="emp_point",
+        leave_one_out=leave_one_out,
+    )
 
 
 def save_validation_predictions(
@@ -295,8 +417,11 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
     samples = make_next_shot_samples(train)
     rally_samples = make_rally_samples(train)
     test_samples = make_test_samples(test)
-    features = feature_columns(samples)
-    rally_features = feature_columns(rally_samples)
+    base_features = feature_columns(samples)
+    base_rally_features = feature_columns(rally_samples)
+    transition_features = empirical_feature_names() if args.transition_features else []
+    features = base_features + transition_features
+    rally_features = base_rally_features + transition_features
     print(
         f"Train prefix samples={len(samples)} | test rallies={len(test_samples)} | "
         f"features={len(features)} | rally samples={len(rally_samples)}",
@@ -307,8 +432,6 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
     action_labels = np.sort(samples["target_actionId"].unique())
     point_labels = np.sort(samples["target_pointId"].unique())
     rally_labels = np.array([0, 1], dtype=np.int8)
-    x_test = test_samples[features]
-    x_rally_test = test_samples[rally_features]
 
     oof_action_pred = np.full(len(samples), -1, dtype=np.int32)
     oof_point_pred = np.full(len(samples), -1, dtype=np.int32)
@@ -329,6 +452,17 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
         val_part = samples[samples["match"].isin(val_matches)].copy()
         train_rally = rally_samples.iloc[train_rally_idx].copy()
         val_rally = rally_samples.iloc[val_rally_idx].copy()
+        fold_test_samples = test_samples
+        if args.transition_features:
+            train_part = add_empirical_next_shot_features(
+                train_part,
+                train_part,
+                leave_one_out=True,
+            )
+            val_part = add_empirical_next_shot_features(val_part, train_part)
+            train_rally = add_empirical_next_shot_features(train_rally, train_part)
+            val_rally = add_empirical_next_shot_features(val_rally, train_part)
+            fold_test_samples = add_empirical_next_shot_features(test_samples, train_part)
         print(
             f"Fold {fold_id}: train matches={len(train_matches)} | val matches={len(val_matches)} | "
             f"train prefixes={len(train_part)} | val prefixes={len(val_part)} | "
@@ -340,6 +474,8 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
         x_val = val_part[features]
         x_rally_train = train_rally[rally_features]
         x_rally_val = val_rally[rally_features]
+        x_test = fold_test_samples[features]
+        x_rally_test = fold_test_samples[rally_features]
 
         action_model = build_model("action", args)
         point_model = build_model("point", args)
@@ -476,23 +612,34 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
 
     if args.refit_full:
         print("Refitting models on all prefix samples...", flush=True)
-        action_model = build_model("action", args).fit(samples[features], samples["target_actionId"])
-        full_x = samples[features]
-        full_test_x = test_samples[features]
+        full_samples = samples
+        full_rally_samples = rally_samples
+        full_test_samples = test_samples
+        if args.transition_features:
+            full_samples = add_empirical_next_shot_features(samples, samples, leave_one_out=True)
+            full_rally_samples = add_empirical_next_shot_features(rally_samples, samples)
+            full_test_samples = add_empirical_next_shot_features(test_samples, samples)
+
+        action_model = build_model("action", args).fit(
+            full_samples[features],
+            full_samples["target_actionId"],
+        )
+        full_x = full_samples[features]
+        full_test_x = full_test_samples[features]
         test_action_pred = action_model.predict(full_test_x)
         if args.stack_point_action:
-            point_full_x = add_action_hint(full_x, samples["target_actionId"])
+            point_full_x = add_action_hint(full_x, full_samples["target_actionId"])
             point_test_x = add_action_hint(full_test_x, test_action_pred)
         else:
             point_full_x = full_x
             point_test_x = full_test_x
-        point_model = build_model("point", args).fit(point_full_x, samples["target_pointId"])
+        point_model = build_model("point", args).fit(point_full_x, full_samples["target_pointId"])
         rally_model = build_model("rally", args).fit(
-            rally_samples[rally_features],
-            rally_samples["serverGetPoint"],
+            full_rally_samples[rally_features],
+            full_rally_samples["serverGetPoint"],
         )
         test_point_pred = point_model.predict(point_test_x)
-        test_rally_pred = rally_model.predict_proba(x_rally_test)[:, 1]
+        test_rally_pred = rally_model.predict_proba(full_test_samples[rally_features])[:, 1]
         if args.models_out_dir:
             save_final_models(
                 args.models_out_dir,
@@ -509,6 +656,7 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
                     "action_labels": action_labels.astype(int).tolist(),
                     "point_labels": point_labels.astype(int).tolist(),
                     "stack_point_action": bool(args.stack_point_action),
+                    "transition_features": bool(args.transition_features),
                     "refit_full": True,
                 },
             )
@@ -556,6 +704,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--val-predictions-out")
     parser.add_argument("--save-oof")
     parser.add_argument("--models-out-dir")
+    parser.add_argument("--transition-features", action="store_true")
     parser.add_argument("--action-class-weights", choices=["balanced", "none"], default="balanced")
     parser.add_argument("--point-class-weights", choices=["balanced", "none"], default="balanced")
     parser.add_argument("--no-stack-point-action", dest="stack_point_action", action="store_false")
