@@ -101,7 +101,7 @@ Run the current-best CatBoost tabular experiment on both local GPUs:
 aicup-tabular-baseline \
   --model catboost \
   --device gpu \
-  --gpu-devices 0:1 \
+  --gpu-devices 1 \
   --n-estimators 600 \
   --learning-rate 0.03 \
   --cat-depth 8 \
@@ -109,14 +109,27 @@ aicup-tabular-baseline \
   --test test_new.csv \
   --out outputs/submission_catboost_gpu_test_new_v1.csv \
   --metrics-out outputs/metrics_catboost_gpu_test_new_v1.json \
-  --val-predictions-out outputs/val_catboost_gpu_test_new_v1
+  --val-predictions-out outputs/val_catboost_gpu_test_new_v1 \
+  --models-out-dir outputs/models_catboost_gpu_test_new_v1
 ```
 
 Current local validation best:
 
 - Model: CatBoost GPU with stacked point prediction and shot interaction features.
 - Settings: `--n-estimators 600 --learning-rate 0.03 --cat-depth 8`.
-- Score: `0.4187` (`f1_action=0.3341`, `f1_point=0.2129`, `auc=0.9995`).
+- Refreshed `test_new.csv` run: `outputs/submission_catboost_gpu_test_new_v1.csv`.
+- Saved models: `outputs/models_catboost_gpu_test_new_v1/`.
+- Score: `0.4143` (`f1_action=0.3311`, `f1_point=0.2050`, `auc=0.9995`).
+
+Recent optimization comparison on the same single match-group split:
+
+| Run | Change | Score | F1 action | F1 point | AUC | Submission |
+|---|---|---:|---:|---:|---:|---|
+| v1 | CatBoost GPU, balanced action/point weights | 0.4143 | 0.3311 | 0.2050 | 0.9995 | `outputs/submission_catboost_gpu_test_new_v1.csv` |
+| v2 | + fold-safe transition priors | 0.3043 | 0.1789 | 0.0821 | 0.9994 | `outputs/submission_catboost_gpu_test_new_v2_transition.csv` |
+| v3 | no action/point class weights | 0.4037 | 0.3140 | 0.1955 | 0.9995 | `outputs/submission_catboost_cpu_test_new_v3_no_class_weights.csv` |
+
+Do not use v2/v3 as the primary submission unless leaderboard evidence contradicts local validation.
 
 Audit validation signals and simple leakage risks:
 
