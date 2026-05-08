@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
@@ -140,6 +141,30 @@ def save_validation_predictions(
         f"Saved validation predictions to: {next_shot_path} and {rally_path}",
         flush=True,
     )
+
+
+def save_model_artifact(model, path: Path) -> None:
+    if hasattr(model, "save_model"):
+        model.save_model(path)
+    else:
+        joblib.dump(model, path)
+
+
+def save_final_models(
+    out_dir: str,
+    models: dict[str, object],
+    metadata: dict,
+) -> None:
+    model_dir = Path(out_dir)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    for name, model in models.items():
+        suffix = ".cbm" if hasattr(model, "save_model") else ".joblib"
+        save_model_artifact(model, model_dir / f"{name}{suffix}")
+    (model_dir / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(f"Saved final models to: {model_dir}", flush=True)
 
 
 def aligned_predict_proba(model, frame: pd.DataFrame, labels: np.ndarray) -> np.ndarray:
@@ -468,7 +493,28 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
         )
         test_point_pred = point_model.predict(point_test_x)
         test_rally_pred = rally_model.predict_proba(x_rally_test)[:, 1]
+        if args.models_out_dir:
+            save_final_models(
+                args.models_out_dir,
+                {
+                    "action": action_model,
+                    "point": point_model,
+                    "rally": rally_model,
+                },
+                {
+                    "model": args.model,
+                    "seed": args.seed,
+                    "features": features,
+                    "rally_features": rally_features,
+                    "action_labels": action_labels.astype(int).tolist(),
+                    "point_labels": point_labels.astype(int).tolist(),
+                    "stack_point_action": bool(args.stack_point_action),
+                    "refit_full": True,
+                },
+            )
     else:
+        if args.models_out_dir:
+            print("Skipping model save because --no-refit-full does not produce final models.", flush=True)
         test_action_pred = predict_from_proba(action_labels, test_action_proba_sum)
         test_point_pred = predict_from_proba(point_labels, test_point_proba_sum)
         test_rally_pred = test_rally_proba_sum[:, 1] / max(len(splits), 1)
@@ -509,6 +555,7 @@ def parse_args(argv: list[str] | None = None):
     parser.add_argument("--metrics-out")
     parser.add_argument("--val-predictions-out")
     parser.add_argument("--save-oof")
+    parser.add_argument("--models-out-dir")
     parser.add_argument("--action-class-weights", choices=["balanced", "none"], default="balanced")
     parser.add_argument("--point-class-weights", choices=["balanced", "none"], default="balanced")
     parser.add_argument("--no-stack-point-action", dest="stack_point_action", action="store_false")

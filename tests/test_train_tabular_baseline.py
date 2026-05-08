@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pandas as pd
@@ -82,6 +83,7 @@ def base_args(**overrides):
         metrics_out=None,
         val_predictions_out=None,
         save_oof=None,
+        models_out_dir=None,
         action_class_weights="none",
         point_class_weights="none",
         stack_point_action=False,
@@ -157,6 +159,23 @@ def test_train_and_predict_oof_exports_diagnostic_columns(tmp_path):
         "isLatePoint",
         "is_final_prefix",
     } <= set(next_shot.columns)
+
+
+def test_train_and_predict_saves_refit_models(tmp_path):
+    train = sample_match_frame()
+    test = train.groupby("rally_uid", sort=False).tail(1).copy().reset_index(drop=True)
+    model_dir = tmp_path / "models"
+
+    train_and_predict(base_args(cv_folds=1, refit_full=True, models_out_dir=str(model_dir)), train, test)
+
+    assert (model_dir / "action.joblib").exists()
+    assert (model_dir / "point.joblib").exists()
+    assert (model_dir / "rally.joblib").exists()
+    metadata = json.loads((model_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["refit_full"] is True
+    assert metadata["stack_point_action"] is False
+    assert metadata["features"]
+    assert metadata["rally_features"]
 
 
 def test_data_contract_loads_sorts_and_validates_submission(tmp_path, monkeypatch):
