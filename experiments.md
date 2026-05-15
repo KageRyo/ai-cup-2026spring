@@ -107,3 +107,6 @@ Planned work:
 
 - Serve Emphasis experiment (action 15/16 boost=15.0): completed successfully. Produced `submission_catboost_serve_emphasis_v1.csv`. Direct OOF score not available from custom script (limitation), but submission is ready for blending.
 
+
+- Ultimate Ensemble: 5-fold (0.45) + seed1011 (0.30) + seed456 (0.15) + Serve Emphasis (0.10) → `submission_final_ultimate_ensemble.csv`. This is the most comprehensive ensemble including the targeted serve experiment.
+
