@@ -63,3 +63,6 @@ Next: Ensemble script, more hybrid scaling, weak-class targeted experiments.
 - Error analysis done: action classes 15 (traditional serve) and 16 (hook serve) have zero F1 in 5-fold OOF.
 
 Next autonomous: Improve hybrid (higher action loss weight, stronger rare class handling), re-test 1-epoch, more CatBoost variants, targeted modeling for weak serve classes.
+
+- Improved hybrid 1-epoch test (action loss 0.55, focal 2.5): completed 0.3313 (worse than previous 0.4037), F1a still ~0.01, heavy bias persists. Weight change did not help rare action learning. Will de-prioritize heavy hybrid fixes for now; use as rally specialist for blending only.
+
