@@ -66,3 +66,7 @@ Next autonomous: Improve hybrid (higher action loss weight, stronger rare class 
 
 - Improved hybrid 1-epoch test (action loss 0.55, focal 2.5): completed 0.3313 (worse than previous 0.4037), F1a still ~0.01, heavy bias persists. Weight change did not help rare action learning. Will de-prioritize heavy hybrid fixes for now; use as rally specialist for blending only.
 
+
+- CatBoost depth10/800trees/lr0.025 (single split): completed, score 0.4062 (F1a=0.3177, F1p=0.1982). Slightly below v1 0.4143.
+- CatBoost seed123 (same best params): completed, score 0.3911 (lower). Diversity for ensemble is moderate.
+
