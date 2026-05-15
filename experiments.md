@@ -9,6 +9,7 @@
 | 004 | 2026-05-08 | CatBoost GPU | prefix + interactions + action stacking | single split by match | 0.4143 | reset | refreshed `test_new.csv`; current best local run |
 | 005 | 2026-05-08 | CatBoost GPU | 004 + fold-safe transition priors | single split by match | 0.3043 | - | negative result; action/point F1 collapsed |
 | 006 | 2026-05-08 | CatBoost CPU | 004 without action/point class weights | single split by match | 0.4037 | - | below 004; GPU attempt OOMed |
+| 007 | 2026-05-15 | Transformer (raw seq + FocalLoss) | raw stroke features + TransformerEncoder (3L/4H) | single GroupShuffleSplit by match | 0.2369 | - | First Transformer attempt; F1_action/point collapsed (no prefix engineering); baseline for future hybrid |
 
 ## Naming
 
