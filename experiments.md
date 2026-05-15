@@ -44,3 +44,12 @@ balanced action/point class weights are still useful under the current feature s
 5. Build seed/model ensembles after validation is stable.
 6. Regenerate all leaderboard submissions from `test_new.csv`; older `test.csv`
    outputs no longer count after the leaderboard reset.
+
+## 2026-05-15 Night Autonomous Run (until ~7 AM)
+
+- Hybrid RNN pipeline fix validated: 1-epoch small test passed (score 0.4037) after adding `total_length=x.size(1)` in pad_packed_sequence. Committed.
+- Launched medium hybrid (5 epochs, hidden 256, 2 layers) as next step.
+- Error analysis on CatBoost 5-fold OOF completed: action accuracy ~0.442, point ~0.271. Zero F1 action classes: 15 (traditional serve), 16 (hook serve). Weak serve-related actions identified for future focus.
+- LightGBM 5-fold still running (very slow on GPU).
+
+Next: Ensemble script, more hybrid scaling, weak-class targeted experiments.
