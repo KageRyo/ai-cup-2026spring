@@ -70,3 +70,6 @@ Next autonomous: Improve hybrid (higher action loss weight, stronger rare class 
 - CatBoost depth10/800trees/lr0.025 (single split): completed, score 0.4062 (F1a=0.3177, F1p=0.1982). Slightly below v1 0.4143.
 - CatBoost seed123 (same best params): completed, score 0.3911 (lower). Diversity for ensemble is moderate.
 
+
+- CatBoost seed456 (same best params): completed, score **0.4163** (F1a=0.3395, F1p=0.2016). One of the strongest single-split runs so far.
+
