@@ -73,3 +73,6 @@ Next autonomous: Improve hybrid (higher action loss weight, stronger rare class 
 
 - CatBoost seed456 (same best params): completed, score **0.4163** (F1a=0.3395, F1p=0.2016). One of the strongest single-split runs so far.
 
+
+- Final ensemble: 5-fold CatBoost (0.65) + seed456 (0.35) created as `submission_final_ensemble_5fold_seed456.csv`. This is currently our strongest practical submission.
+
