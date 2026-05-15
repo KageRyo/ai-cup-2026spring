@@ -92,3 +92,6 @@ Planned work:
 
 - CatBoost seed789: completed, score 0.4080 (F1a=0.3361, F1p=0.1840). Usable for ensemble but not as strong as seed456.
 
+
+- CatBoost seed1011: completed, score **0.4211** (F1a=0.3379, F1p=0.2150). **Highest single-split score so far** — excellent diversity candidate.
+
