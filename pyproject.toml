@@ -29,6 +29,9 @@ aicup-error-analysis = "error_analysis:main"
 aicup-lstm-baseline = "train_lstm_baseline:main"
 aicup-tabular-baseline = "train_tabular_baseline:main"
 aicup-transformer-baseline = "train_transformer_baseline:main"
+aicup-hybrid-rnn = "train_hybrid_rnn:main"
+aicup-ensemble = "train_ensemble:main"
+aicup-catboost-serve-emphasis = "train_catboost_serve_emphasis:main"
 
 [tool.setuptools]
 py-modules = [
@@ -38,6 +41,9 @@ py-modules = [
     "train_lstm_baseline",
     "train_tabular_baseline",
     "train_transformer_baseline",
+    "train_hybrid_rnn",
+    "train_ensemble",
+    "train_catboost_serve_emphasis",
 ]
 
 [tool.setuptools.package-dir]
