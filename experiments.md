@@ -95,3 +95,6 @@ Planned work:
 
 - CatBoost seed1011: completed, score **0.4211** (F1a=0.3379, F1p=0.2150). **Highest single-split score so far** — excellent diversity candidate.
 
+
+- Big ensemble created: 5-fold (0.40) + seed1011 (0.25) + seed456 (0.20) + v1 (0.15) → `submission_final_big_ensemble_v1.csv`. This is currently our strongest submission.
+
