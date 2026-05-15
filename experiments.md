@@ -53,3 +53,13 @@ balanced action/point class weights are still useful under the current feature s
 - LightGBM 5-fold still running (very slow on GPU).
 
 Next: Ensemble script, more hybrid scaling, weak-class targeted experiments.
+
+## Night Run Update (2026-05-15 ~19:00+)
+
+- Hybrid RNN medium (5 epochs, hidden 256, 2L): completed, best 0.4004 (epoch 2), but F1_action collapsed to ~0.001 after epoch 1 (heavy bias to actionId=8). Pipeline now stable (no shape crash), but learning issue for rare actions remains. Not competitive.
+- LightGBM 5-fold: killed after ~81 min (still stuck in Fold 0 action training, too slow on this GPU setup).
+- New CatBoost depth10/800trees/lr0.025 variant launched (single split).
+- Ensemble script ready, blended CatBoost+Hybrid submission created (using CatBoost for action/point + hybrid for serverGetPoint).
+- Error analysis done: action classes 15 (traditional serve) and 16 (hook serve) have zero F1 in 5-fold OOF.
+
+Next autonomous: Improve hybrid (higher action loss weight, stronger rare class handling), re-test 1-epoch, more CatBoost variants, targeted modeling for weak serve classes.
