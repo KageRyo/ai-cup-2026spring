@@ -76,3 +76,16 @@ Next autonomous: Improve hybrid (higher action loss weight, stronger rare class 
 
 - Final ensemble: 5-fold CatBoost (0.65) + seed456 (0.35) created as `submission_final_ensemble_5fold_seed456.csv`. This is currently our strongest practical submission.
 
+
+## Final Push (2026-05-15 late night ~ 7 AM plan)
+
+Goal: Maximize ensemble performance before deadline.
+
+Planned work:
+1. More seed diversity: Launch seed 789, 1011, 2022 (same best params) → total 5-6 strong single-split models.
+2. Targeted experiment for weak classes: New script `train_catboost_serve_emphasis.py` — significantly increase weight on actionId 15 and 16 (traditional/hook serves), which error analysis showed have near-zero F1.
+3. Final large ensembles:
+   - Heavy ensemble of 5-fold + all good single-split seeds.
+   - Ensemble + light Hybrid blending on serverGetPoint.
+4. Save every new script and every new submission file separately, with clear naming.
+
