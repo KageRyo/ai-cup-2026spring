@@ -104,3 +104,6 @@ Planned work:
 
 - Serve Emphasis experiment (boost=15 on action 15/16): completed. Custom script finished successfully, but direct OOF score not computed in this run (limitation of the custom script). Submission saved for potential blending.
 
+
+- Serve Emphasis experiment (action 15/16 boost=15.0): completed successfully. Produced `submission_catboost_serve_emphasis_v1.csv`. Direct OOF score not available from custom script (limitation), but submission is ready for blending.
+
