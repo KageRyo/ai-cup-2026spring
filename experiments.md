@@ -89,3 +89,6 @@ Planned work:
    - Ensemble + light Hybrid blending on serverGetPoint.
 4. Save every new script and every new submission file separately, with clear naming.
 
+
+- CatBoost seed789: completed, score 0.4080 (F1a=0.3361, F1p=0.1840). Usable for ensemble but not as strong as seed456.
+
