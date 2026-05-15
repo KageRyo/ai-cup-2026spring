@@ -101,3 +101,6 @@ Planned work:
 
 - CatBoost seed1011: completed, score **0.4211** (F1a=0.3379, F1p=0.2150). **New highest single-split score** — best single model so far.
 
+
+- Serve Emphasis experiment (boost=15 on action 15/16): completed. Custom script finished successfully, but direct OOF score not computed in this run (limitation of the custom script). Submission saved for potential blending.
+
