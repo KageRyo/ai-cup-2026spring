@@ -103,6 +103,8 @@ def train_rally_opening_models(args):
     y_action = opening_samples["target_actionId"]
     y_rally = opening_samples["serverGetPoint"]
 
+    logger.info(f"Using {len(feat_cols)} features for Rally Opening models: {feat_cols}")
+
     # Action model: directly predict what the opening serve action is
     action_model = CatBoostClassifier(
         iterations=args.n_estimators,
@@ -139,8 +141,10 @@ def train_rally_opening_models(args):
     # In practice, for short rallies in test, the first row is the opening serve.
     test_first = test[test["strikeNumber"] == 1].copy()
 
-    # Build the same feature set for test
-    test_opening = test_first[feat_cols].copy()
+    # Build the exact same features as training (including derived ones)
+    test_opening = test_first[["sex", "match", "numberGame", "gamePlayerId", "gamePlayerOtherId",
+                               "strikeId", "handId", "strengthId", "spinId", "positionId",
+                               "scoreSelf", "scoreOther"]].copy()
     test_opening["is_deuce_start"] = ((test_opening["scoreSelf"] >= 10) & (test_opening["scoreOther"] >= 10)).astype("int8")
     test_opening["score_diff_start"] = test_opening["scoreSelf"] - test_opening["scoreOther"]
 
