@@ -130,3 +130,15 @@ Planned work:
 
 These directly attack the two largest identified shifts. Local proxy metrics (action 15/16 rate + server mean) are now much closer to test_new statistics than any previous submission.
 
+### First-Stroke Dedicated Specialist (Option B - more thorough fix)
+
+| Date | Model | Focus | Notes |
+|------|-------|-------|-------|
+| 2026-05-28 | First-Stroke Specialist v1 | strikeNumber <= 2 only (28k samples, 40.3%) | New dedicated script `train_first_stroke.py`. Still limited by next-shot formulation (action 15/16 remain ~0.05% predicted). Best used as strong override for the earliest prefixes in blending. |
+
+New blended candidates (prior-corrected base + first-stroke override on strike <=2):
+- `submission_ultimate_firststroke_blend_v1.csv`
+- `submission_seed1011_firststroke_blend_v1.csv`
+
+**Key remaining insight**: Even training exclusively on first 1-2 strokes, serve actions 15/16 are still almost never targets in the next-shot framing. A truly effective solution will likely require changing the target definition for rally-start predictions (predict opening serve characteristics or immediate post-serve return distribution directly).
+
