@@ -175,20 +175,28 @@ def train_serve_conditional_models(args):
 
     # Rally outcome after serve (critical for short-rally serverGetPoint)
     rally_samples = post_serve_samples[post_serve_samples["is_final_prefix"]].copy()
-    rally_model = CatBoostClassifier(
-        iterations=300,
-        learning_rate=0.035,
-        depth=7,
-        loss_function="Logloss",
-        auto_class_weights="Balanced",
-        random_seed=args.seed + 2,
-        thread_count=-1,
-        verbose=False,
-        allow_writing_files=False,
-    )
 
-    logger.info(f"Training serve-conditional serverGetPoint model on {len(rally_samples)} post-serve rallies...")
-    rally_model.fit(rally_samples[feat_cols], rally_samples["serverGetPoint"], verbose=20)
+    rally_model = None
+    constant_rally_prob = None
+
+    if rally_samples["serverGetPoint"].nunique() >= 2:
+        rally_model = CatBoostClassifier(
+            iterations=300,
+            learning_rate=0.035,
+            depth=7,
+            loss_function="Logloss",
+            auto_class_weights="Balanced",
+            random_seed=args.seed + 2,
+            thread_count=-1,
+            verbose=False,
+            allow_writing_files=False,
+        )
+        logger.info(f"Training serve-conditional serverGetPoint model on {len(rally_samples)} post-serve rallies...")
+        rally_model.fit(rally_samples[feat_cols], rally_samples["serverGetPoint"], verbose=20)
+    else:
+        constant_rally_prob = float(rally_samples["serverGetPoint"].iloc[0])
+        logger.warning(f"Post-serve rally target is constant (value={constant_rally_prob}). "
+                       "Using constant probability for serverGetPoint in this specialist.")
 
     # Prepare test features with the same serve-conditional enrichment
     test_samples = make_test_samples(test)
@@ -198,7 +206,11 @@ def train_serve_conditional_models(args):
     logger.info("Predicting with serve-conditional specialist...")
     action_pred = action_model.predict(X_test).ravel().astype(int)
     point_pred = point_model.predict(X_test).ravel().astype(int)
-    rally_pred = rally_model.predict_proba(X_test)[:, 1]
+
+    if rally_model is not None:
+        rally_pred = rally_model.predict_proba(X_test)[:, 1]
+    else:
+        rally_pred = np.full(len(X_test), constant_rally_prob, dtype=np.float32)
 
     submission = prediction_frame(test_samples, action_pred, point_pred, rally_pred)
 
