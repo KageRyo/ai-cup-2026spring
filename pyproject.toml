@@ -37,6 +37,7 @@ aicup-prior-correction = "prior_correction:main"
 aicup-early-game = "train_early_game:main"
 aicup-blend-early = "blend_early_specialist:main"
 aicup-first-stroke = "train_first_stroke:main"
+aicup-make-final = "make_final_submission:main"
 
 [tool.setuptools]
 py-modules = [
@@ -53,6 +54,7 @@ py-modules = [
     "train_early_game",
     "blend_early_specialist",
     "train_first_stroke",
+    "make_final_submission",
 ]
 
 [tool.setuptools.package-dir]
