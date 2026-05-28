@@ -184,5 +184,17 @@ New script: `train_rally_opening.py` + CLI `aicup-rally-opening`
 
 This is the implementation of option 1 chosen by the user after 0.30x LB results.
 
-Training launched. Will be integrated via the updated `aicup-make-final --rally-opening`.
+**Training results (2026-05-28)**:
+- Created 14,995 rally opening samples (one per rally).
+- Opening action distribution in training: 15=57.1%, 0=23.7%, 16=11.7% (very close to real first-stroke distribution).
+- Pure `submission_rally_opening_v1.csv`:
+  - Action 15+16 = **74.47%** (huge jump from previous ~0%)
+  - serverGetPoint mean = 0.5018
+
+**Final Blended v4** (`submission_final_v4_with_rally_opening.csv`):
+- serverGetPoint mean: **0.3796** (extremely close to test proxy 0.376)
+- Action 15+16 = **52.41%** (best we have ever achieved)
+- 1,291 short rallies received Rally Opening override.
+
+This is currently our strongest distribution match to test_new.
 
