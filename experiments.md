@@ -110,3 +110,23 @@ Planned work:
 
 - Ultimate Ensemble: 5-fold (0.45) + seed1011 (0.30) + seed456 (0.15) + Serve Emphasis (0.10) → `submission_final_ultimate_ensemble.csv`. This is the most comprehensive ensemble including the targeted serve experiment.
 
+## 2026-05-28 — Distribution Shift Diagnosis + Targeted Fixes (Post-LB 0.3x drop)
+
+**Root cause identified via audit + stats:**
+- test_new has **70% short rallies (length ≤3)** vs 30% in train (median 2 vs 5).
+- First-stroke action 15 = 67.4% in test_new (vs 57% train); serverGetPoint proxy rate only **37.6%** (vs 55% train).
+- Existing next-shot formulation + long-rally-heavy training never properly learns early-game / opening-serve dynamics → all models predicted ~0% action 15/16 on short prefixes and wrong server prior.
+
+**Fixes implemented (Phase 1):**
+- `src/prior_correction.py` + CLI `aicup-prior-correction`: logit-bias adjustment that forces `serverGetPoint` mean to the test proxy (~0.376) while perfectly preserving ranking. Applied to all strong submissions.
+- `src/train_early_game.py` + CLI `aicup-early-game`: specialist CatBoost trained **only on prefixes with knownPrefixLen ≤ 3** (38k samples, 55% of training data). 450 trees, depth 8, balanced class weights.
+- `src/blend_early_specialist.py` + CLI `aicup-blend-early`: overrides action/point (and blends server) from the early specialist for all test rallies whose observed prefix is short.
+
+**New candidate submissions (ready for upload):**
+- `outputs/submission_final_ultimate_ensemble_prior_corrected_v2.csv` — just prior correction (fastest single change)
+- `outputs/submission_early_blended_ultimate_v1.csv` — prior-corrected ultimate + 85% early specialist on 70% of test
+- `outputs/submission_early_blended_ultimate_v2_heavy.csv` — heavier early weight + threshold=4 (80% overridden)
+- `outputs/submission_early_blended_seed1011_v1.csv` — best single seed1011 base + early specialist
+
+These directly attack the two largest identified shifts. Local proxy metrics (action 15/16 rate + server mean) are now much closer to test_new statistics than any previous submission.
+

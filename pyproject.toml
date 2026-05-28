@@ -32,6 +32,9 @@ aicup-transformer-baseline = "train_transformer_baseline:main"
 aicup-hybrid-rnn = "train_hybrid_rnn:main"
 aicup-ensemble = "train_ensemble:main"
 aicup-catboost-serve-emphasis = "train_catboost_serve_emphasis:main"
+aicup-prior-correction = "prior_correction:main"
+aicup-early-game = "train_early_game:main"
+aicup-blend-early = "blend_early_specialist:main"
 
 [tool.setuptools]
 py-modules = [
@@ -44,6 +47,9 @@ py-modules = [
     "train_hybrid_rnn",
     "train_ensemble",
     "train_catboost_serve_emphasis",
+    "prior_correction",
+    "train_early_game",
+    "blend_early_specialist",
 ]
 
 [tool.setuptools.package-dir]
