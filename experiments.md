@@ -168,5 +168,21 @@ Training launched. Once finished, it will be integrated via `aicup-make-final` f
 - Action 15/16: still 0% (confirms deeper next-shot target formulation problem remains).
 - 983 (FS) + 495 (EG) + 405 (SC) rallies received specialist overrides.
 
-**Conclusion on this deeper approach**: The serve-conditional framing helps model short-rally dynamics and allows explicit serve features, but cannot overcome the core limitation that serve actions (15/16) almost never appear as targets in the current next-shot sample construction. Future work should explore predicting the opening serve itself or using a different target formulation for rally starts.
+**Conclusion on this deeper approach**: The serve-conditional framing helps model short-rally dynamics and allows explicit serve features, but cannot overcome the core limitation that serve actions (15/16) almost never appear as targets in the current next-shot sample construction.
+
+### True Architectural Breakthrough Attempt: Independent Rally Opening Predictor (2026-05-28)
+
+New script: `train_rally_opening.py` + CLI `aicup-rally-opening`
+
+**Design philosophy**:
+- Completely abandons the next-shot formulation for the critical opening of each rally.
+- Creates one sample **per rally** focused only on the opening stroke (strikeNumber=1).
+- Directly predicts:
+  - The opening actionId (what the serve will be — 15/16/0/etc.)
+  - The final serverGetPoint of the rally given the opening characteristics.
+- This is the first model in the entire project that does **not** suffer from the "serve actions are never targets" problem.
+
+This is the implementation of option 1 chosen by the user after 0.30x LB results.
+
+Training launched. Will be integrated via the updated `aicup-make-final --rally-opening`.
 
