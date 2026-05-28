@@ -44,9 +44,11 @@ def tiered_blend(
     base: pd.DataFrame,
     first_stroke: pd.DataFrame | None,
     early_game: pd.DataFrame | None,
+    serve_conditional: pd.DataFrame | None,
     test_samples: pd.DataFrame,
     fs_weight: float = 0.82,
     eg_weight: float = 0.65,
+    sc_weight: float = 0.78,
 ) -> pd.DataFrame:
     """
     Tiered blending strategy based on observed prefix length.
@@ -80,6 +82,18 @@ def tiered_blend(
         )
         logger.info(f"Applied early-game override to {early.sum()} rallies (strike 3-4)")
 
+    # Deeper fix: when the last observed action was a serve (15/16), use serve-conditional specialist
+    if serve_conditional is not None:
+        sc = serve_conditional.sort_values("rally_uid").reset_index(drop=True)
+        last_was_serve = test_samples["actionId"].isin({15, 16}).values
+        out.loc[last_was_serve, "actionId"] = sc.loc[last_was_serve, "actionId"].values
+        out.loc[last_was_serve, "pointId"] = sc.loc[last_was_serve, "pointId"].values
+        out.loc[last_was_serve, "serverGetPoint"] = (
+            sc_weight * sc.loc[last_was_serve, "serverGetPoint"].values +
+            (1 - sc_weight) * out.loc[last_was_serve, "serverGetPoint"].values
+        )
+        logger.info(f"Applied serve-conditional override to {last_was_serve.sum()} rallies (last action was serve)")
+
     return out[SUBMISSION_COLUMNS]
 
 
@@ -93,6 +107,9 @@ def main(argv=None):
                    help="First-stroke specialist submission (highest priority for strike <= 2)")
     p.add_argument("--early-game", default=None,
                    help="Early-game specialist submission (for strike 3-4)")
+    p.add_argument("--serve-conditional", default=None,
+                   help="Serve-conditional specialist (deeper fix) — used when last observed action was a serve (15/16)")
+    p.add_argument("--sc-weight", type=float, default=0.78, help="Weight for serve-conditional specialist")
     p.add_argument("--out", required=True, help="Output final submission path")
     p.add_argument("--fs-weight", type=float, default=0.82, help="Weight for first-stroke in tier 1")
     p.add_argument("--eg-weight", type=float, default=0.65, help="Weight for early-game in tier 2")
@@ -110,15 +127,17 @@ def main(argv=None):
 
     first_stroke = pd.read_csv(args.first_stroke)[SUBMISSION_COLUMNS] if args.first_stroke else None
     early_game = pd.read_csv(args.early_game)[SUBMISSION_COLUMNS] if args.early_game else None
+    serve_conditional = pd.read_csv(args.serve_conditional)[SUBMISSION_COLUMNS] if args.serve_conditional else None
 
     test = load_test_csv(default_test_path())
     featured = add_prefix_features(test)
     test_samples = featured.groupby("rally_uid", sort=False).tail(1).reset_index(drop=True)
 
     final = tiered_blend(
-        base, first_stroke, early_game, test_samples,
+        base, first_stroke, early_game, serve_conditional, test_samples,
         fs_weight=args.fs_weight,
         eg_weight=args.eg_weight,
+        sc_weight=args.sc_weight,
     )
 
     out_path = Path(args.out)
