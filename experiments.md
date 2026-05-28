@@ -142,3 +142,17 @@ New blended candidates (prior-corrected base + first-stroke override on strike <
 
 **Key remaining insight**: Even training exclusively on first 1-2 strokes, serve actions 15/16 are still almost never targets in the next-shot framing. A truly effective solution will likely require changing the target definition for rally-start predictions (predict opening serve characteristics or immediate post-serve return distribution directly).
 
+### Deeper Architectural Fix: Serve-Conditional Return Specialist (2026-05-28)
+
+New script: `train_serve_conditional.py` + CLI `aicup-serve-conditional`
+
+**Design**:
+- Explicitly extracts only "post-serve" next-shot samples (where the current observed action is 15 or 16).
+- Adds dedicated serve-quality features (`serve_is_traditional`, `serve_spin_heavy`, interactions with score state, etc.).
+- Trains a high-capacity specialist focused purely on "what happens immediately after the opening serve".
+- This is the first model in the project that directly targets the dominant short-rally + high-serve regime in `test_new`.
+
+This represents the "更下一層" (deeper layer) solution beyond simple early-prefix filtering.
+
+Training launched. Once finished, it will be integrated via `aicup-make-final` for tiered blending.
+
