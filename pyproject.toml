@@ -39,6 +39,7 @@ aicup-blend-early = "blend_early_specialist:main"
 aicup-first-stroke = "train_first_stroke:main"
 aicup-make-final = "make_final_submission:main"
 aicup-serve-conditional = "train_serve_conditional:main"
+aicup-rally-opening = "train_rally_opening:main"
 
 [tool.setuptools]
 py-modules = [
@@ -57,6 +58,7 @@ py-modules = [
     "train_first_stroke",
     "make_final_submission",
     "train_serve_conditional",
+    "train_rally_opening",
 ]
 
 [tool.setuptools.package-dir]
