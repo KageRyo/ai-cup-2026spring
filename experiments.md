@@ -156,3 +156,17 @@ This represents the "更下一層" (deeper layer) solution beyond simple early-p
 
 Training launched. Once finished, it will be integrated via `aicup-make-final` for tiered blending.
 
+**Run results (2026-05-28)**:
+- Post-serve samples: 10,309 (14.8% of next-shot data), 91 features.
+- Action/point models trained normally.
+- Rally head: degenerate (constant target=1.0 in the 1,319 post-serve final prefixes) → fell back to constant probability 1.0.
+- Resulting submission: serverGetPoint mean = 1.0 (overly optimistic), action 15/16 still ~0%.
+- Integrated via `aicup-make-final` (weight 0.40 on 405 rallies where last observed action was serve).
+
+**Final blended v3** (`submission_final_v3_full_specialists.csv`):
+- serverGetPoint mean: 0.4208
+- Action 15/16: still 0% (confirms deeper next-shot target formulation problem remains).
+- 983 (FS) + 495 (EG) + 405 (SC) rallies received specialist overrides.
+
+**Conclusion on this deeper approach**: The serve-conditional framing helps model short-rally dynamics and allows explicit serve features, but cannot overcome the core limitation that serve actions (15/16) almost never appear as targets in the current next-shot sample construction. Future work should explore predicting the opening serve itself or using a different target formulation for rally starts.
+
