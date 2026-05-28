@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 
 from data_contract import SUBMISSION_COLUMNS, load_test_csv, default_test_path, validate_submission
 
@@ -99,15 +100,15 @@ def main(argv=None):
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     corrected.to_csv(out_path, index=False, encoding="utf-8")
-    print(f"Saved prior-corrected submission to: {out_path}")
-    print(f"  Original serverGetPoint mean: {sub['serverGetPoint'].mean():.4f}")
-    print(f"  Corrected serverGetPoint mean: {corrected['serverGetPoint'].mean():.4f}")
-    print(f"  (target prior was {args.target_prior:.5f})")
+    logger.success(f"Saved prior-corrected submission to: {out_path}")
+    logger.info(f"  Original serverGetPoint mean: {sub['serverGetPoint'].mean():.4f}")
+    logger.info(f"  Corrected serverGetPoint mean: {corrected['serverGetPoint'].mean():.4f}")
+    logger.info(f"  (target prior was {args.target_prior:.5f})")
 
     if args.validate:
         test = load_test_csv(default_test_path())
         validate_submission(corrected, test)
-        print("Validation passed.")
+        logger.success("Validation passed.")
 
 
 if __name__ == "__main__":

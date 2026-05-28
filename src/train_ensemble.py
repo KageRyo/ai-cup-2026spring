@@ -28,6 +28,7 @@ Usage examples:
 from __future__ import annotations
 
 import argparse
+from loguru import logger
 from pathlib import Path
 
 import numpy as np
@@ -102,7 +103,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
-    print(f"Loading {len(args.submissions)} submissions for ensembling...", flush=True)
+    logger.info(f"Loading {len(args.submissions)} submissions for ensembling...")
     submission = ensemble_submissions(args.submissions, args.weights)
 
     # Validate against test set
@@ -113,8 +114,8 @@ def main(argv: list[str] | None = None) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(out_path, index=False, encoding="utf-8")
 
-    print(f"Ensemble submission saved to: {out_path}", flush=True)
-    print(submission.head(8), flush=True)
+    logger.info(f"Ensemble submission saved to: {out_path}")
+    logger.info(submission.head(8))
 
 
 if __name__ == "__main__":

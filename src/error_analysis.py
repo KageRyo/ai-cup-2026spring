@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from loguru import logger
 import json
 from pathlib import Path
 
@@ -137,7 +138,7 @@ def main(argv: list[str] | None = None) -> None:
         Path(args.rally_oof) if args.rally_oof else None,
         Path(args.out_dir),
     )
-    print(json.dumps(summary, indent=2, sort_keys=True), flush=True)
+    logger.info(json.dumps(summary, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

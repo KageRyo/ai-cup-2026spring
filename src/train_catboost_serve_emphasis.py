@@ -33,6 +33,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
+from loguru import logger
 
 from data_contract import (
     SUBMISSION_COLUMNS,
@@ -63,7 +64,7 @@ def compute_serve_emphasis_weights(
 
 
 def train_serve_emphasis_model(args):
-    print("Loading and preparing data with serve emphasis...", flush=True)
+    logger.info("Loading and preparing data with serve emphasis...")
 
     train = load_train_csv(args.train)
     test = load_test_csv(args.test)
@@ -72,7 +73,7 @@ def train_serve_emphasis_model(args):
     test_samples = make_test_samples(test)
 
     feat_cols = feature_columns(samples)
-    print(f"Using {len(feat_cols)} features", flush=True)
+    logger.info(f"Using {len(feat_cols)} features")
 
     X_train = samples[feat_cols]
     y_action = samples["target_actionId"]
@@ -86,7 +87,7 @@ def train_serve_emphasis_model(args):
     # For pointId we keep normal balanced weights
     point_weights = None
 
-    print(f"Serve emphasis boost = {args.serve_boost}", flush=True)
+    logger.info(f"Serve emphasis boost = {args.serve_boost}")
 
     # Train action model with heavy serve emphasis
     action_model = CatBoostClassifier(
@@ -101,7 +102,7 @@ def train_serve_emphasis_model(args):
         allow_writing_files=False,
     )
 
-    print("Training action model with serve emphasis...", flush=True)
+    logger.info("Training action model with serve emphasis...")
     action_model.fit(
         X_train, y_action, sample_weight=action_weights, verbose=100
     )
@@ -119,7 +120,7 @@ def train_serve_emphasis_model(args):
         allow_writing_files=False,
     )
 
-    print("Training point model...", flush=True)
+    logger.info("Training point model...")
     point_model.fit(X_train, y_point, verbose=100)
 
     # Rally model (same as before)
@@ -136,7 +137,7 @@ def train_serve_emphasis_model(args):
         allow_writing_files=False,
     )
 
-    print("Training rally model...", flush=True)
+    logger.info("Training rally model...")
     rally_model.fit(
         rally_samples[feat_cols], rally_samples["serverGetPoint"], verbose=50
     )
@@ -144,7 +145,7 @@ def train_serve_emphasis_model(args):
     # Predict on test
     X_test = test_samples[feat_cols]
 
-    print("Predicting on test set...", flush=True)
+    logger.info("Predicting on test set...")
     test_action_pred = action_model.predict(X_test).ravel().astype(int)
     test_point_pred = point_model.predict(X_test).ravel().astype(int)
     test_rally_pred = rally_model.predict_proba(X_test)[:, 1]
@@ -177,7 +178,7 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    print(f"Running Serve Emphasis experiment (boost={args.serve_boost})...", flush=True)
+    logger.info(f"Running Serve Emphasis experiment (boost={args.serve_boost})...")
 
     submission, metadata = train_serve_emphasis_model(args)
 
@@ -187,11 +188,11 @@ def main(argv=None):
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(out_path, index=False, encoding="utf-8")
-    print(f"Saved serve-emphasis submission to: {out_path}", flush=True)
+    logger.success(f"Saved serve-emphasis submission to: {out_path}")
 
     if args.metrics_out:
         Path(args.metrics_out).write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-        print(f"Saved metadata to: {args.metrics_out}", flush=True)
+        logger.success(f"Saved metadata to: {args.metrics_out}")
 
 
 if __name__ == "__main__":

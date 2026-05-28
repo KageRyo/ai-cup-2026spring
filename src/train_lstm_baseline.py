@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from loguru import logger
 import copy
 import random
 from pathlib import Path
@@ -228,7 +229,7 @@ def evaluate(model, loader, device, losses) -> dict[str, float]:
 
 
 def train_model(args, train: pd.DataFrame):
-    print("Building categorical encoders and training tensors...", flush=True)
+    logger.info("Building categorical encoders and training tensors...")
     categories, encode_frame = build_encoder(train)
     x_all, y_action, y_point, y_rally, lengths, max_len = prepare_train_arrays(train, encode_frame)
     print(
@@ -369,9 +370,9 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     set_seed(args.seed)
 
-    print(f"Loading train data from {args.train}", flush=True)
+    logger.info(f"Loading train data from {args.train}")
     train = load_train_csv(args.train)
-    print(f"Loading test data from {args.test}", flush=True)
+    logger.info(f"Loading test data from {args.test}")
     test = load_test_csv(args.test)
     train["strikeNumber"] = train["strikeNumber"].clip(0, 40)
     test["strikeNumber"] = test["strikeNumber"].clip(0, 40)
@@ -390,9 +391,9 @@ def main(argv: list[str] | None = None) -> None:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(out_path, index=False, encoding="utf-8")
-    print(f"Best validation score: {best_score:.4f}", flush=True)
-    print(f"Saved submission to: {out_path}", flush=True)
-    print(submission.head(), flush=True)
+    logger.info(f"Best validation score: {best_score:.4f}")
+    logger.info(f"Saved submission to: {out_path}")
+    logger.info(submission.head())
 
 
 if __name__ == "__main__":

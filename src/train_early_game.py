@@ -26,6 +26,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
+from loguru import logger
 
 from data_contract import (
     SUBMISSION_COLUMNS,
@@ -50,7 +51,7 @@ def filter_early_samples(samples: pd.DataFrame, max_prefix_len: int = 3) -> pd.D
 
 
 def train_early_game_models(args):
-    print("Loading data for early-game specialist...", flush=True)
+    logger.info("Loading data for early-game specialist...")
 
     train = load_train_csv(args.train)
     test = load_test_csv(args.test)
@@ -59,12 +60,12 @@ def train_early_game_models(args):
     all_samples = make_next_shot_samples(train)
     early_samples = filter_early_samples(all_samples, max_prefix_len=args.max_prefix_len)
 
-    print(f"Total next-shot samples: {len(all_samples):,}")
-    print(f"Early samples (prefix <= {args.max_prefix_len}): {len(early_samples):,} "
-          f"({len(early_samples)/len(all_samples)*100:.1f}%)", flush=True)
+    logger.info(f"Total next-shot samples: {len(all_samples):,}")
+    logger.info(f"Early samples (prefix <= {args.max_prefix_len}): {len(early_samples):,} "
+                f"({len(early_samples)/len(all_samples)*100:.1f}%)")
 
     feat_cols = feature_columns(early_samples)
-    print(f"Using {len(feat_cols)} features for early-game model", flush=True)
+    logger.info(f"Using {len(feat_cols)} features for early-game model")
 
     X = early_samples[feat_cols]
     y_action = early_samples["target_actionId"]
@@ -83,7 +84,7 @@ def train_early_game_models(args):
         allow_writing_files=False,
     )
 
-    print("Training early-game action model...", flush=True)
+    logger.info("Training early-game action model...")
     action_model.fit(X, y_action, verbose=50)
 
     point_model = CatBoostClassifier(
@@ -98,7 +99,7 @@ def train_early_game_models(args):
         allow_writing_files=False,
     )
 
-    print("Training early-game point model...", flush=True)
+    logger.info("Training early-game point model...")
     point_model.fit(X, y_point, verbose=50)
 
     # Also train a short-rally serverGetPoint model (final prefix of short rallies)
@@ -119,7 +120,7 @@ def train_early_game_models(args):
         allow_writing_files=False,
     )
 
-    print(f"Training early/short-rally serverGetPoint model on {len(short_rally_samples)} samples...", flush=True)
+    logger.info(f"Training early/short-rally serverGetPoint model on {len(short_rally_samples)} samples...")
     rally_model.fit(
         short_rally_samples[feat_cols],
         short_rally_samples["serverGetPoint"],
@@ -132,7 +133,7 @@ def train_early_game_models(args):
 
     # For early-game specialist we still predict on ALL test rows,
     # but caller will decide when to trust these predictions.
-    print("Predicting with early-game specialist on test set...", flush=True)
+    logger.info("Predicting with early-game specialist on test set...")
     action_pred = action_model.predict(X_test).ravel().astype(int)
     point_pred = point_model.predict(X_test).ravel().astype(int)
     rally_pred = rally_model.predict_proba(X_test)[:, 1]
@@ -172,7 +173,7 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
-    print(f"Running Early-Game Specialist (max_prefix_len={args.max_prefix_len})...", flush=True)
+    logger.info(f"Running Early-Game Specialist (max_prefix_len={args.max_prefix_len})...")
 
     submission, metadata, models = train_early_game_models(args)
 
@@ -182,11 +183,11 @@ def main(argv=None):
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(out_path, index=False, encoding="utf-8")
-    print(f"Saved early-game specialist submission to: {out_path}", flush=True)
+    logger.success(f"Saved early-game specialist submission to: {out_path}")
 
     if args.metrics_out:
         Path(args.metrics_out).write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-        print(f"Saved metadata to: {args.metrics_out}", flush=True)
+        logger.success(f"Saved metadata to: {args.metrics_out}")
 
 
 if __name__ == "__main__":

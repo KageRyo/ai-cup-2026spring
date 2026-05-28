@@ -26,6 +26,7 @@ Usage example (on GPU 1):
 from __future__ import annotations
 
 import argparse
+from loguru import logger
 import copy
 import json
 import math
@@ -438,7 +439,7 @@ def train_one_fold(
         else:
             no_improve += 1
             if no_improve >= patience:
-                print(f"Early stopping at epoch {epoch}", flush=True)
+                logger.info(f"Early stopping at epoch {epoch}")
                 break
 
     if best_state is not None:
@@ -447,7 +448,7 @@ def train_one_fold(
 
 
 def train_model(args, train: pd.DataFrame):
-    print("Building categorical encoders and training tensors...", flush=True)
+    logger.info("Building categorical encoders and training tensors...")
     categories, encode_frame = build_encoder(train)
     x_all, y_action, y_point, y_rally, lengths, max_len = prepare_train_arrays(train, encode_frame)
     print(
@@ -473,9 +474,9 @@ def train_model(args, train: pd.DataFrame):
     )
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}", flush=True)
+    logger.info(f"Using device: {device}")
     if device.type == "cuda":
-        print(f"CUDA: {torch.cuda.get_device_name(device)}", flush=True)
+        logger.info(f"CUDA: {torch.cuda.get_device_name(device)}")
 
     # Correct per-feature vocabulary sizes (critical for embeddings)
     num_tokens = [len(categories[col]) + 1 for col in FEATURES]
@@ -553,9 +554,9 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     set_seed(args.seed)
 
-    print(f"Loading train data from {args.train}", flush=True)
+    logger.info(f"Loading train data from {args.train}")
     train = load_train_csv(args.train)
-    print(f"Loading test data from {args.test}", flush=True)
+    logger.info(f"Loading test data from {args.test}")
     test = load_test_csv(args.test)
 
     # Clip extreme strikeNumber for stability
@@ -577,9 +578,9 @@ def main(argv: list[str] | None = None) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(out_path, index=False, encoding="utf-8")
 
-    print(f"Best validation score: {best_score:.4f}", flush=True)
-    print(f"Saved submission to: {out_path}", flush=True)
-    print(submission.head(), flush=True)
+    logger.info(f"Best validation score: {best_score:.4f}")
+    logger.info(f"Saved submission to: {out_path}")
+    logger.info(submission.head())
 
     # Save metrics if requested
     if args.metrics_out:
@@ -602,7 +603,7 @@ def main(argv: list[str] | None = None) -> None:
         mpath = Path(args.metrics_out)
         mpath.parent.mkdir(parents=True, exist_ok=True)
         mpath.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
-        print(f"Saved metrics to: {mpath}", flush=True)
+        logger.info(f"Saved metrics to: {mpath}")
 
     # TODO in future version: save OOF predictions and models (refit_full path)
 

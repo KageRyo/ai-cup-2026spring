@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from loguru import logger
 import json
 from pathlib import Path
 
@@ -123,8 +124,8 @@ def main(argv: list[str] | None = None) -> None:
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(result, indent=2, sort_keys=True), flush=True)
-    print(f"Saved validation audit to: {out_path}", flush=True)
+    logger.info(json.dumps(result, indent=2, sort_keys=True))
+    logger.info(f"Saved validation audit to: {out_path}")
 
 
 if __name__ == "__main__":

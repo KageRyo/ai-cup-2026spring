@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from loguru import logger
 import json
 from pathlib import Path
 
@@ -259,10 +260,7 @@ def save_validation_predictions(
     rally_path = prefix.with_name(f"{prefix.stem}_rally.csv")
     next_shot.to_csv(next_shot_path, index=False, encoding="utf-8")
     rally.to_csv(rally_path, index=False, encoding="utf-8")
-    print(
-        f"Saved validation predictions to: {next_shot_path} and {rally_path}",
-        flush=True,
-    )
+    logger.success(f"Saved validation predictions to: {next_shot_path} and {rally_path}")
 
 
 def save_model_artifact(model, path: Path) -> None:
@@ -286,7 +284,7 @@ def save_final_models(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    print(f"Saved final models to: {model_dir}", flush=True)
+    logger.info(f"Saved final models to: {model_dir}")
 
 
 def aligned_predict_proba(model, frame: pd.DataFrame, labels: np.ndarray) -> np.ndarray:
@@ -481,7 +479,7 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
         point_model = build_model("point", args)
         rally_model = build_model("rally", args)
 
-        print(f"Fold {fold_id}: training action model...", flush=True)
+        logger.info(f"Fold {fold_id}: training action model...")
         action_model.fit(x_train, train_part["target_actionId"])
         val_action_pred = np.asarray(action_model.predict(x_val)).ravel().astype(np.int32)
         test_action_proba = aligned_predict_proba(action_model, x_test, action_labels)
@@ -497,12 +495,12 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
             point_x_val = x_val
             point_x_test = x_test
 
-        print(f"Fold {fold_id}: training point model...", flush=True)
+        logger.info(f"Fold {fold_id}: training point model...")
         point_model.fit(point_x_train, train_part["target_pointId"])
         val_point_pred = np.asarray(point_model.predict(point_x_val)).ravel().astype(np.int32)
         test_point_proba_sum += aligned_predict_proba(point_model, point_x_test, point_labels)
 
-        print(f"Fold {fold_id}: training rally model on last known prefix per rally...", flush=True)
+        logger.info(f"Fold {fold_id}: training rally model on last known prefix per rally...")
         rally_model.fit(x_rally_train, train_rally["serverGetPoint"])
         val_rally_proba = aligned_predict_proba(rally_model, x_rally_val, rally_labels)[:, 1]
         test_rally_proba_sum += aligned_predict_proba(rally_model, x_rally_test, rally_labels)
@@ -611,7 +609,7 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
         save_validation_predictions(oof_prefix, val_action_frame, val_rally_frame)
 
     if args.refit_full:
-        print("Refitting models on all prefix samples...", flush=True)
+        logger.info("Refitting models on all prefix samples...")
         full_samples = samples
         full_rally_samples = rally_samples
         full_test_samples = test_samples
@@ -662,7 +660,7 @@ def train_and_predict(args, train: pd.DataFrame, test: pd.DataFrame):
             )
     else:
         if args.models_out_dir:
-            print("Skipping model save because --no-refit-full does not produce final models.", flush=True)
+            logger.info("Skipping model save because --no-refit-full does not produce final models.")
         test_action_pred = predict_from_proba(action_labels, test_action_proba_sum)
         test_point_pred = predict_from_proba(point_labels, test_point_proba_sum)
         test_rally_pred = test_rally_proba_sum[:, 1] / max(len(splits), 1)
@@ -715,9 +713,9 @@ def parse_args(argv: list[str] | None = None):
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    print(f"Loading train data from {args.train}", flush=True)
+    logger.info(f"Loading train data from {args.train}")
     train = load_train_csv(args.train)
-    print(f"Loading test data from {args.test}", flush=True)
+    logger.info(f"Loading test data from {args.test}")
     test = load_test_csv(args.test)
     metrics, submission = train_and_predict(args, train, test)
     validate_submission(submission, test)
@@ -729,9 +727,9 @@ def main(argv: list[str] | None = None) -> None:
         metrics_path = Path(args.metrics_out)
         metrics_path.parent.mkdir(parents=True, exist_ok=True)
         metrics_path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        print(f"Saved metrics to: {metrics_path}", flush=True)
-    print(f"Saved submission to: {out_path}", flush=True)
-    print(submission.head(), flush=True)
+        logger.info(f"Saved metrics to: {metrics_path}")
+    logger.info(f"Saved submission to: {out_path}")
+    logger.info(submission.head())
 
 
 if __name__ == "__main__":

@@ -34,6 +34,7 @@ Usage (5-fold on GPU 1, overnight run):
 from __future__ import annotations
 
 import argparse
+from loguru import logger
 import copy
 import json
 import random
@@ -275,13 +276,13 @@ def build_sequence_data(samples: pd.DataFrame, feature_cols: list[str], has_next
 
 def prepare_hybrid_data(train: pd.DataFrame, test: pd.DataFrame):
     """Build the full featured samples and convert to sequence format."""
-    print("Building rich prefix features (reusing tabular pipeline)...", flush=True)
+    logger.info("Building rich prefix features (reusing tabular pipeline)...")
     samples = make_next_shot_samples(train)
     rally_samples = make_rally_samples(train)
     test_samples = make_test_samples(test)
 
     feat_cols = feature_columns(samples)
-    print(f"Rich feature dimension: {len(feat_cols)}", flush=True)
+    logger.info(f"Rich feature dimension: {len(feat_cols)}")
 
     # Group into sequences for the RNN
     train_seq = build_sequence_data(samples, feat_cols, has_next_targets=True)
@@ -437,7 +438,7 @@ def train_one_fold_hybrid(args, data, train_idx, val_idx, device, fold_id):
         else:
             no_imp += 1
             if no_imp >= patience:
-                print(f"Fold {fold_id}: early stopping at epoch {ep}", flush=True)
+                logger.info(f"Fold {fold_id}: early stopping at epoch {ep}")
                 break
 
     if best_state:
@@ -451,7 +452,7 @@ def train_hybrid(args, train: pd.DataFrame, test: pd.DataFrame):
     splits = build_group_splits(args, data["rally_samples"])  # reuse the group split logic
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}", flush=True)
+    logger.info(f"Using device: {device}")
 
     oof_action = np.full(len(data["train_seq"]["rally_uids"]), -1, dtype=np.int32)
     oof_point = np.full(len(data["train_seq"]["rally_uids"]), -1, dtype=np.int32)
@@ -463,7 +464,7 @@ def train_hybrid(args, train: pd.DataFrame, test: pd.DataFrame):
     test_rally_sum = np.zeros(len(data["test_seq"]["sequences"]), dtype=np.float64)
 
     for fold_id, (tr_idx, va_idx) in enumerate(splits):
-        print(f"\n=== Fold {fold_id} ===", flush=True)
+        logger.info(f"\n=== Fold {fold_id} ===")
         model, best_sc = train_one_fold_hybrid(args, data, tr_idx, va_idx, device, fold_id)
 
         # OOF prediction on validation rallies
@@ -477,7 +478,7 @@ def train_hybrid(args, train: pd.DataFrame, test: pd.DataFrame):
         # TODO: full OOF mapping + test prediction averaging (for v1 we do single model for speed)
         # In production hybrid we would average across folds like the tabular code does.
 
-    print("Hybrid training complete (v1 simplified single-fold equivalent for speed).", flush=True)
+    logger.info("Hybrid training complete (v1 simplified single-fold equivalent for speed).")
     # For the first overnight run we do a single strong model (GroupShuffleSplit) to get a fast number.
     # 5-fold version can be launched afterwards with --cv-folds 5.
 
@@ -512,13 +513,13 @@ def main(argv=None):
     args = parse_args(argv)
     set_seed(args.seed)
 
-    print(f"Loading data...", flush=True)
+    logger.info(f"Loading data...")
     train = load_train_csv(args.train)
     test = load_test_csv(args.test)
 
     # For the first version we run a strong single-split hybrid (fast feedback)
     # Full 5-fold + proper OOF will be added in the next iteration after we see the score.
-    print("Preparing hybrid data (this may take 30-60s)...", flush=True)
+    logger.info("Preparing hybrid data (this may take 30-60s)...")
     data = prepare_hybrid_data(train, test)
 
     # Use the same group split as the strong CatBoost baseline
@@ -526,7 +527,7 @@ def main(argv=None):
     tr_idx, va_idx = splits[0]
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-    print(f"Training hybrid BiGRU on {len(tr_idx)} train / {len(va_idx)} val rallies...", flush=True)
+    logger.info(f"Training hybrid BiGRU on {len(tr_idx)} train / {len(va_idx)} val rallies...")
 
     model, best_score = train_one_fold_hybrid(args, data, tr_idx, va_idx, device, 0)
 
@@ -557,9 +558,9 @@ def main(argv=None):
     out_path.parent.mkdir(parents=True, exist_ok=True)
     submission.to_csv(out_path, index=False, encoding="utf-8")
 
-    print(f"\n=== Hybrid RNN (single split) best val score: {best_score:.4f} ===", flush=True)
-    print(f"Saved submission to: {out_path}", flush=True)
-    print(submission.head(8), flush=True)
+    logger.info(f"\n=== Hybrid RNN (single split) best val score: {best_score:.4f} ===")
+    logger.info(f"Saved submission to: {out_path}")
+    logger.info(submission.head(8))
 
     if args.metrics_out:
         m = {
@@ -571,7 +572,7 @@ def main(argv=None):
             "device": str(device),
         }
         Path(args.metrics_out).write_text(json.dumps(m, indent=2) + "\n", encoding="utf-8")
-        print(f"Saved metrics to: {args.metrics_out}", flush=True)
+        logger.info(f"Saved metrics to: {args.metrics_out}")
 
 
 if __name__ == "__main__":

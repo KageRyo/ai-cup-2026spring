@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 
 from data_contract import (
     SUBMISSION_COLUMNS,
@@ -91,15 +92,15 @@ def main(argv=None):
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     blended.to_csv(out_path, index=False, encoding="utf-8")
-    print(f"Saved blended submission to: {out_path}")
+    logger.success(f"Saved blended submission to: {out_path}")
 
     early_count = (test_samples["knownPrefixLen"] <= args.early_threshold).sum()
-    print(f"  Early prefixes overridden: {early_count} / {len(test_samples)} "
-          f"({early_count/len(test_samples)*100:.1f}%)")
+    logger.info(f"  Early prefixes overridden: {early_count} / {len(test_samples)} "
+                f"({early_count/len(test_samples)*100:.1f}%)")
 
     if args.validate:
         validate_submission(blended, test)
-        print("Validation passed.")
+        logger.success("Validation passed.")
 
 
 if __name__ == "__main__":
