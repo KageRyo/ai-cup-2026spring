@@ -47,15 +47,12 @@ from catboost import CatBoostClassifier
 from loguru import logger
 
 from data_contract import (
-    SHOT_COLUMNS,
-    SUBMISSION_COLUMNS,
     default_test_path,
     load_test_csv,
     load_train_csv,
     validate_submission,
 )
 from train_tabular_baseline import (
-    add_prefix_features,
     feature_columns,
     make_next_shot_samples,
     make_test_samples,

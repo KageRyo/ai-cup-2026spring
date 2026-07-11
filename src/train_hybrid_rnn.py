@@ -44,22 +44,16 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.metrics import f1_score, roc_auc_score
-from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
 # Reuse the excellent tabular feature engineering and utilities
 from train_tabular_baseline import (
-    add_prefix_features,
     build_group_splits,
     feature_columns,
     make_next_shot_samples,
     make_rally_samples,
     make_test_samples,
-    save_model_artifact,
-    save_validation_predictions,
-    score,
-    summarize_fold_metrics,
 )
 from data_contract import (
     SUBMISSION_COLUMNS,
@@ -454,14 +448,7 @@ def train_hybrid(args, train: pd.DataFrame, test: pd.DataFrame):
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
-    oof_action = np.full(len(data["train_seq"]["rally_uids"]), -1, dtype=np.int32)
-    oof_point = np.full(len(data["train_seq"]["rally_uids"]), -1, dtype=np.int32)
-    oof_rally = np.full(len(data["train_seq"]["rally_uids"]), np.nan, dtype=np.float64)
     fold_metrics = []
-
-    test_action_sum = np.zeros((len(data["test_seq"]["sequences"]), len(data["action_classes"])), dtype=np.float64)
-    test_point_sum = np.zeros((len(data["test_seq"]["sequences"]), len(data["point_classes"])), dtype=np.float64)
-    test_rally_sum = np.zeros(len(data["test_seq"]["sequences"]), dtype=np.float64)
 
     for fold_id, (tr_idx, va_idx) in enumerate(splits):
         logger.info(f"\n=== Fold {fold_id} ===")
@@ -513,7 +500,7 @@ def main(argv=None):
     args = parse_args(argv)
     set_seed(args.seed)
 
-    logger.info(f"Loading data...")
+    logger.info("Loading data...")
     train = load_train_csv(args.train)
     test = load_test_csv(args.test)
 

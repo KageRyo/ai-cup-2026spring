@@ -36,14 +36,12 @@ from catboost import CatBoostClassifier
 from loguru import logger
 
 from data_contract import (
-    SUBMISSION_COLUMNS,
     default_test_path,
     load_test_csv,
     load_train_csv,
     validate_submission,
 )
 from train_tabular_baseline import (
-    add_prefix_features,
     feature_columns,
     make_next_shot_samples,
     make_test_samples,
@@ -83,9 +81,6 @@ def train_serve_emphasis_model(args):
     action_weights = compute_serve_emphasis_weights(
         y_action, base_weight=2.5, serve_boost=args.serve_boost
     )
-
-    # For pointId we keep normal balanced weights
-    point_weights = None
 
     logger.info(f"Serve emphasis boost = {args.serve_boost}")
 

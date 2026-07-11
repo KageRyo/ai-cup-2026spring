@@ -26,7 +26,6 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
 from loguru import logger
@@ -38,7 +37,6 @@ from data_contract import (
     load_train_csv,
     validate_submission,
 )
-from train_tabular_baseline import prediction_frame
 
 
 def make_rally_opening_samples(train: pd.DataFrame) -> pd.DataFrame:
