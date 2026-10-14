@@ -4,11 +4,12 @@ Project workspace for the AI CUP 2026 Spring table-tennis rally prediction task.
 
 ## Environment
 
-This repo uses Ryo's Miniconda with a project-local conda environment:
+Create an isolated Python 3.10 or 3.11 environment with the tool of your
+choice. For example, with conda:
 
 ```bash
-source /mnt/8tb_hdd/ryo/miniconda3/etc/profile.d/conda.sh
-conda activate /mnt/8tb_hdd/ryo/ai-cup-2026spring/conda-envs/ai-cup-ryo
+conda create -n ai-cup-2026spring python=3.11
+conda activate ai-cup-2026spring
 ```
 
 Install the package after dependencies are ready:
